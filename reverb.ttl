@@ -1,0 +1,102 @@
+@prefix lv2:  <http://lv2plug.in/ns/lv2core#>.
+@prefix atom: <http://lv2plug.in/ns/ext/atom#> .
+@prefix time: <http://lv2plug.in/ns/ext/time#> .
+@prefix doap: <http://usefulinc.com/ns/doap#>.
+@prefix ll:   <http://ll-plugins.nongnu.org/lv2/namespace#>.
+
+<http://ganger.webhop.org/plugins/reverb3>
+	a lv2:Plugin ;
+	lv2:binary <reverb3.so> ;
+	doap:name "Convolution Reverb" ;
+	doap:license <http://usefulinc.com/doap/licenses/gpl> ;
+	ll:pegName "p" ;
+
+	lv2:port [
+		a lv2:AudioPort, lv2:InputPort ;
+		lv2:index 0 ;
+		lv2:symbol "left_in" ;
+		lv2:name "Left Input" ;
+	] , [
+		a lv2:AudioPort, lv2:InputPort ;
+		lv2:index 1 ;
+		lv2:symbol "right_in" ;
+		lv2:name "Right Input" ;
+	] , [
+		a lv2:AudioPort, lv2:OutputPort ;
+		lv2:index 2 ;
+		lv2:symbol "left_out" ;
+		lv2:name "Left Output" ;
+	] , [
+		a lv2:AudioPort, lv2:OutputPort ;
+		lv2:index 3 ;
+		lv2:symbol "right_out" ;
+		lv2:name "Right Output" ;
+	] , [
+		a lv2:ControlPort, lv2:InputPort;
+		lv2:index 4;
+		lv2:symbol "density";
+		lv2:name "m^2 per tree";
+		lv2:minimum 0.01;
+		lv2:maximum 1000;
+		lv2:default 5;
+                lv2:portProperty <http://lv2plug.in/ns/ext/port-props#logarithmic> ;
+	] , [
+		a lv2:ControlPort, lv2:InputPort;
+		lv2:index 5;
+		lv2:symbol "length";
+		lv2:name "Length (s)";
+		lv2:minimum 0.01;
+		lv2:maximum 20;
+		lv2:default 1;
+                lv2:portProperty <http://lv2plug.in/ns/ext/port-props#logarithmic> ;
+	] , [
+		a lv2:ControlPort, lv2:InputPort;
+		lv2:index 6;
+		lv2:symbol "decay";
+		lv2:name "Decay";
+		lv2:minimum 1.1;
+		lv2:maximum 10;
+		lv2:default 2;
+                lv2:portProperty <http://lv2plug.in/ns/ext/port-props#logarithmic> ;
+	] , [
+		a lv2:ControlPort, lv2:InputPort;
+		lv2:index 7;
+		lv2:symbol "seed";
+		lv2:name "Reflection seed";
+		lv2:minimum 1;
+		lv2:maximum 1000;
+		lv2:default 1;
+	] , [
+		a lv2:ControlPort, lv2:InputPort;
+		lv2:index 8;
+		lv2:symbol "atten";
+		lv2:name "Attenuation (dB/s)";
+		lv2:minimum 0;
+		lv2:maximum 40;
+		lv2:default 2;
+	] , [
+		a lv2:ControlPort, lv2:InputPort;
+		lv2:index 9;
+		lv2:symbol "dist";
+		lv2:name "Source/Receiver distance (m)";
+		lv2:minimum 1;
+		lv2:maximum 1000;
+		lv2:default 10;
+                lv2:portProperty <http://lv2plug.in/ns/ext/port-props#logarithmic> ;
+	] , [
+		a lv2:ControlPort, lv2:InputPort;
+		lv2:index 10;
+		lv2:symbol "gain";
+		lv2:name "Gain (dB)";
+		lv2:minimum -50;
+		lv2:maximum 10;
+		lv2:default 0;
+	] , [
+		a lv2:ControlPort, lv2:InputPort;
+		lv2:index 11;
+		lv2:symbol "cross";
+		lv2:name "Crosstalk (dB)";
+		lv2:minimum -50;
+		lv2:maximum 10;
+		lv2:default -10;
+	] .
