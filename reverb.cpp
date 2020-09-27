@@ -8,8 +8,8 @@
 #include <thread>
 #include <zita-convolver.h>
 
-#include "plugin.h"
-#include "reverb3.peg"
+#include <lvtk/plugin.hpp>
+#include "reverb.peg"
 
 
 template<class Eng>
