@@ -72,7 +72,7 @@ void mix(float* v1, float* v2, float a, uint32_t N){
 		v1[i] += v2[i]*a;
 }
 
-struct Reverb : public Plugin<Reverb, p_n_ports> {
+struct Reverb : public lvtk::Plugin<Reverb> {
 	constexpr static const char* URI = p_uri;
 
 	struct params {
@@ -135,14 +135,14 @@ struct Reverb : public Plugin<Reverb, p_n_ports> {
 				std::cout << "creating" << std::endl;
 				proc = new Convproc;
 				proc->set_options(0);
-				proc->set_density(0.f);
 				proc->configure(
 					2, // # in channels
 					4, // # out channels
 					maxsize,
 					pars.buffersize, // buffer size (quantum)
 					pars.buffersize, // min partition
-					pars.buffersize);// max partition
+					pars.buffersize, // max partition
+					0.f); // density
 
 				proc->impdata_create(0,0,1,imp[0].data(),0,L);
 				proc->impdata_create(0,1,1,imp[1].data(),0,L);
@@ -166,9 +166,17 @@ struct Reverb : public Plugin<Reverb, p_n_ports> {
 
 	Convproc* proc = nullptr;
 
+	float* port[p_n_ports];
+
 	double rate;
-	Reverb(double _rate) : rate{_rate} {
+	Reverb(const lvtk::Args& args_) :
+		Plugin(args_), rate(args_.sample_rate)
+	{}
+
+	void connect_port (uint32_t p, void* data) {
+		port[p] = static_cast<float*>(data);
 	}
+
 
 	void run(uint32_t N){
 		auto xl = port[p_left_in];
@@ -218,4 +226,4 @@ struct Reverb : public Plugin<Reverb, p_n_ports> {
 	}
 };
 
-int _ = Reverb::register_class();
+static const lvtk::Descriptor<Reverb> _(p_uri);
