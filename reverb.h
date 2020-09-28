@@ -77,64 +77,72 @@ void mix(T* v1, T* v2, T a, uint32_t N){
 		v1[i] += v2[i]*a;
 }
 
+struct params {
+	uint32_t seed;
+	double length;
+	double m2_per_tree;
+	double decay;
+	double atten;
+	double dist;
+	int buffersize;
+
+	bool operator==(const params& p){
+		return seed == p.seed &&
+		length == p.length &&
+		m2_per_tree == p.m2_per_tree &&
+		decay == p.decay &&
+		atten == p.atten &&
+		dist == p.dist &&
+		buffersize == p.buffersize;
+	}
+
+	bool operator!=(const params& p){
+		return !(operator==(p));
+	}
+};
+
+inline static constexpr double c_sound = 343;
+
+std::array<std::vector<float>, 4> make_impulses(const params& pars, const float rate) {
+	uint32_t d = uint32_t(pars.dist/c_sound*rate);
+	double s = 1/pars.m2_per_tree*(c_sound/rate)*(c_sound/rate);
+	double r = pars.atten/10*log(10)/rate;
+	uint32_t L = uint32_t(pars.length*rate);
+	double p = pars.decay;
+
+	//std::mt19937 dev(pars.seed);
+	std::minstd_rand dev(pars.seed);
+
+	double max;
+	std::array<std::vector<double>, 4> tmp;
+
+	for(int i = 0; i < 4; i++){
+		tmp[i] = reverb(L,d,s,p,r,dev);
+		max = std::max(max,*std::max_element(tmp[i].begin(), tmp[i].end()));
+	}
+
+	std::cout << "max " << max << std::endl;
+
+	std::array<std::vector<float>, 4> imp;
+	for(int i = 0; i < 4; i++){
+		imp[i] = std::vector<float>(L);
+		std::cout << "Made " << i << std::endl;
+		for(int j = 0; j < L; j++)
+			imp[i][j] = tmp[i][j]/max;
+	}
+	return imp;
+}
+
+
 struct Reverb : public lvtk::Plugin<Reverb> {
 	constexpr static const char* URI = p_uri;
 
-	struct params {
-		uint32_t seed;
-		double length;
-		double m2_per_tree;
-		double decay;
-		double atten;
-		double dist;
-		int buffersize;
-
-		bool operator==(const params& p){
-			return seed == p.seed &&
-			length == p.length &&
-			m2_per_tree == p.m2_per_tree &&
-			decay == p.decay &&
-			atten == p.atten &&
-			dist == p.dist &&
-			buffersize == p.buffersize;
-		}
-
-		bool operator!=(const params& p){
-			return !(operator==(p));
-		}
-	};
 
 	bool update = false;
 	std::thread worker{[this]{
 		while(true){
 			if(update){
-				uint32_t d = uint32_t(pars.dist/c_sound*rate);
-				double s = 1/pars.m2_per_tree*(c_sound/rate)*(c_sound/rate);
-				double r = pars.atten/10*log(10)/rate;
-				uint32_t L = uint32_t(pars.length*rate);
-				double p = pars.decay;
-
-				//std::mt19937 dev(pars.seed);
-				std::minstd_rand dev(pars.seed);
-
-				double max;
-				std::vector<double> tmp[4];
-
-				for(int i = 0; i < 4; i++){
-					tmp[i] = reverb(L,d,s,p,r,dev);
-					max = std::max(max,*std::max_element(tmp[i].begin(), tmp[i].end()));
-				}
-
-				std::cout << "max " << max << std::endl;
-
-				for(int i = 0; i < 4; i++){
-					imp[i] = std::vector<float>(L);
-					std::cout << "Made " << i << std::endl;
-					for(int j = 0; j < L; j++)
-						imp[i][j] = tmp[i][j]/max;
-				}
-
-
+				imp = make_impulses(pars, rate);
 				std::cout << "deleting" << std::endl;
 				delete proc;
 				std::cout << "creating" << std::endl;
@@ -149,6 +157,7 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 					pars.buffersize, // max partition
 					0.f); // density
 
+				auto L = imp[0].size();
 				proc->impdata_create(0,0,1,imp[0].data(),0,L);
 				proc->impdata_create(0,1,1,imp[1].data(),0,L);
 				proc->impdata_create(1,2,1,imp[2].data(),0,L);
@@ -163,11 +172,10 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 	}};
 
 	const uint32_t maxsize = 96000*20;
-	const double c_sound = 343;
 
 	params pars;
 
-	std::vector<float> imp[4];
+	std::array<std::vector<float>, 4> imp;
 
 	Convproc* proc = nullptr;
 
