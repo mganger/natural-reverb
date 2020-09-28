@@ -1,3 +1,4 @@
+#pragma once
 #define __STDCPP_WANT_MATH_SPEC_FUNCS__ 1
 #include <cmath>
 #include <vector>
@@ -38,14 +39,16 @@ std::vector<double> phase(const std::vector<uint32_t>& echos, Eng& rd){
 	return v;
 }
 
-void env(uint32_t d, double p, std::vector<double>& v){
+template <class Vect>
+void env(uint32_t d, double p, Vect& v){
 	std::cout << "env" << std::endl;
 	auto L = v.size();
 	for(int i = d; i < L+d; i++)
 		v[i-d] /= pow(i,p);
 }
 
-void decay(double r, std::vector<double>& v){
+template <class Vect>
+void decay(double r, Vect& v){
 	std::cout << "decay" << std::endl;
 	auto L = v.size();
 	std::cout << "r " << r << std::endl;
@@ -62,12 +65,14 @@ std::vector<double> reverb(uint32_t L, uint32_t d, double s, double p, double r,
 	return x;
 }
 
-void copy(float* v1, float* v2, float a, uint32_t N){
+template <class T>
+void copy(T* v1, T* v2, T a, uint32_t N){
 	for(int i = 0; i < N; i++)
 		v2[i] = v1[i]*a;
 }
 
-void mix(float* v1, float* v2, float a, uint32_t N){
+template <class T>
+void mix(T* v1, T* v2, T a, uint32_t N){
 	for(int i = 0; i < N; i++)
 		v1[i] += v2[i]*a;
 }
@@ -225,3 +230,5 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 		}
 	}
 };
+
+inline static const lvtk::Descriptor<Reverb> descriptor(p_uri);
