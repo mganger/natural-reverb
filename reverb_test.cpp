@@ -2,10 +2,70 @@
 #include <boost/test/unit_test.hpp>
 #include <reverb.h>
 
-BOOST_AUTO_TEST_SUITE(reverb_tests)
+namespace utf = boost::unit_test::framework;
+
+struct Fixture {
+	static const int N = 256;
+	float input[2][N];
+	float output[2][N];
+	int seed = 23;
+	float length = 1;
+	float density = 0.5;
+	float decay = 2.1;
+	float atten = 0.1;
+	float dist = 15;
+	float rate = 96000;
+	float gain = -1;
+	float cross = -10;
+	lvtk::Args args;
+	Reverb plugin;
+
+	Fixture() : args(rate, "", {}), plugin(args) {
+		plugin.connect_port(p_left_in, input[0]);
+		plugin.connect_port(p_right_in, input[1]);
+		plugin.connect_port(p_left_out, output[0]);
+		plugin.connect_port(p_right_out, output[1]);
+		plugin.connect_port(p_seed, &seed);
+		plugin.connect_port(p_length, &length);
+		plugin.connect_port(p_density, &density);
+		plugin.connect_port(p_decay, &decay);
+		plugin.connect_port(p_atten, &atten);
+		plugin.connect_port(p_dist, &dist);
+		plugin.connect_port(p_gain, &gain);
+		plugin.connect_port(p_cross, &cross);
+		BOOST_TEST_CHECKPOINT("Starting");
+	}
+};
+
+BOOST_FIXTURE_TEST_SUITE(reverb_tests, Fixture)
 
 BOOST_AUTO_TEST_CASE(simple) {
-	BOOST_CHECK(1 == 1);
+	BOOST_CHECK(!plugin.proc);
+	BOOST_CHECK(!plugin.new_proc);
+	plugin.run(N);
+	BOOST_CHECK(!plugin.proc);
+	BOOST_CHECK(plugin.new_proc);
+}
+
+BOOST_AUTO_TEST_CASE(no_change) {
+	BOOST_CHECK(!plugin.proc);
+	plugin.run(N);
+	BOOST_CHECK(!plugin.proc);
+	BOOST_TEST_CHECKPOINT("After first run");
+	plugin.new_proc->wait();
+	BOOST_TEST_CHECKPOINT("After ready");
+	plugin.run(N);
+	BOOST_CHECK(plugin.proc);
+}
+
+BOOST_AUTO_TEST_CASE(changed) {
+	plugin.run(N);
+	plugin.new_proc->wait();
+	plugin.run(N);
+	length = 2;
+	BOOST_CHECK(!plugin.new_proc);
+	plugin.run(N);
+	BOOST_CHECK(plugin.new_proc);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

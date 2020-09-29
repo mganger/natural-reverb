@@ -55,14 +55,12 @@ void env(uint32_t d, double p, Vect& v){
 template <class Vect>
 void decay(double r, Vect& v){
 	auto L = v.size();
-	std::cout << "r " << r << std::endl;
 	for(int i = 0; i < L; i++)
 		v[i] *= exp(-r*i);
 }
 
 template<class Eng>
 Vect reverb(uint32_t L, uint32_t d, double s, double p, double r, Eng& rd){
-	std::cout << "reverb" << std::endl;
 	auto x = phase(poisson(L,s,d,rd),rd);
 	env(d,p,x);
 	decay(r,x);
@@ -77,7 +75,7 @@ struct params {
 	double atten;
 	double dist;
 	double rate;
-	int buffersize;
+	uint32_t buffersize;
 
 	bool operator==(const params& p){
 		return seed == p.seed &&
@@ -103,7 +101,7 @@ struct params {
 
 		std::minstd_rand dev(seed);
 
-		VectMat<4> imp;
+		VectMat<4> imp(4, L);
 		for(int i = 0; i < 4; i++)
 			imp.row(i) = reverb(L,d,s,p,r,dev);
 
@@ -160,15 +158,16 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 			yl(port[p_left_out], N),
 			yr(port[p_right_out], N);
 
-		params pars2;
-		pars2.seed = uint32_t(*port[p_seed]);
-		pars2.length = *port[p_length];
-		pars2.m2_per_tree = *port[p_density];
-		pars2.decay = *port[p_decay];
-		pars2.atten = *port[p_atten];
-		pars2.dist = *port[p_dist];
-		pars2.buffersize = N;
-		pars2.rate = rate;
+		params pars2{
+			.seed = uint32_t(*port[p_seed]),
+			.length = *port[p_length],
+			.m2_per_tree = *port[p_density],
+			.decay = *port[p_decay],
+			.atten = *port[p_atten],
+			.dist = *port[p_dist],
+			.rate = rate,
+			.buffersize = N,
+		};
 
 
 		if (pars != pars2 && !new_proc)
@@ -180,16 +179,16 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 			if (new_proc->wait_for(0s) == std::future_status::ready) {
 				proc = new_proc->get();
 				proc->start_process(0, 0);
+				new_proc.reset();
 			}
-			new_proc.reset();
 		}
 
 		if (proc) {
 			if(proc->state() == Convproc::ST_WAIT)
 				proc->check_stop();
 
-			Vect::Map(proc->inpdata(0), N) = xl;
-			Vect::Map(proc->inpdata(1), N) = xr;
+			MapVect(proc->inpdata(0), N) = xl;
+			MapVect(proc->inpdata(1), N) = xr;
 
 			proc->process(false);
 
