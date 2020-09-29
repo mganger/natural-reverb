@@ -2,16 +2,23 @@
 #define __STDCPP_WANT_MATH_SPEC_FUNCS__ 1
 #include <cmath>
 #include <vector>
+#include <optional>
+#include <future>
 #include <iostream>
 #include <random>
 #include <algorithm>
 #include <tuple>
+#include <chrono>
 #include <thread>
 #include <zita-convolver.h>
 
 #include <lvtk/plugin.hpp>
 #include "reverb.peg"
 
+using namespace std::chrono;
+
+inline static constexpr double c_sound = 343;
+inline static constexpr uint32_t maxsize = 96000*20;
 
 template<class Eng>
 std::vector<uint32_t> poisson(uint32_t L, double s, uint32_t d, Eng& rd){
@@ -84,6 +91,7 @@ struct params {
 	double decay;
 	double atten;
 	double dist;
+	double rate;
 	int buffersize;
 
 	bool operator==(const params& p){
@@ -93,66 +101,68 @@ struct params {
 		decay == p.decay &&
 		atten == p.atten &&
 		dist == p.dist &&
-		buffersize == p.buffersize;
+		buffersize == p.buffersize &&
+		rate == p.rate;
 	}
 
 	bool operator!=(const params& p){
 		return !(operator==(p));
 	}
+
+
+	std::array<std::vector<float>, 4> make_impulses(const params& pars) const {
+		uint32_t d = uint32_t(pars.dist/c_sound*pars.rate);
+		double s = 1/pars.m2_per_tree*(c_sound/pars.rate)*(c_sound/pars.rate);
+		double r = pars.atten/10*log(10)/pars.rate;
+		uint32_t L = uint32_t(pars.length*pars.rate);
+		double p = pars.decay;
+
+		//std::mt19937 dev(pars.seed);
+		std::minstd_rand dev(pars.seed);
+
+		double max;
+		std::array<std::vector<double>, 4> tmp;
+
+		for(int i = 0; i < 4; i++){
+			tmp[i] = reverb(L,d,s,p,r,dev);
+			max = std::max(max,*std::max_element(tmp[i].begin(), tmp[i].end()));
+		}
+
+		std::cout << "max " << max << std::endl;
+
+		std::array<std::vector<float>, 4> imp;
+		for(int i = 0; i < 4; i++){
+			imp[i] = std::vector<float>(L);
+			std::cout << "Made " << i << std::endl;
+			for(int j = 0; j < L; j++)
+				imp[i][j] = tmp[i][j]/max;
+		}
+		return imp;
+	}
+
+	std::shared_ptr<Convproc> make_processor() const {
+		auto proc = std::make_shared<Convproc>();
+		auto imp = make_impulses(*this);
+		proc->set_options(0);
+		proc->configure(
+			2, // # in channels
+			4, // # out channels
+			maxsize,
+			buffersize, // buffer size (quantum)
+			buffersize, // min partition
+			buffersize, // max partition
+			0.f); // density
+
+		auto L = imp[0].size();
+		proc->impdata_create(0,0,1,imp[0].data(),0,L);
+		proc->impdata_create(0,1,1,imp[1].data(),0,L);
+		proc->impdata_create(1,2,1,imp[2].data(),0,L);
+		proc->impdata_create(1,3,1,imp[3].data(),0,L);
+		return proc;
+	}
+
 };
 
-inline static constexpr double c_sound = 343;
-inline static constexpr uint32_t maxsize = 96000*20;
-
-std::array<std::vector<float>, 4> make_impulses(const params& pars, const float rate) {
-	uint32_t d = uint32_t(pars.dist/c_sound*rate);
-	double s = 1/pars.m2_per_tree*(c_sound/rate)*(c_sound/rate);
-	double r = pars.atten/10*log(10)/rate;
-	uint32_t L = uint32_t(pars.length*rate);
-	double p = pars.decay;
-
-	//std::mt19937 dev(pars.seed);
-	std::minstd_rand dev(pars.seed);
-
-	double max;
-	std::array<std::vector<double>, 4> tmp;
-
-	for(int i = 0; i < 4; i++){
-		tmp[i] = reverb(L,d,s,p,r,dev);
-		max = std::max(max,*std::max_element(tmp[i].begin(), tmp[i].end()));
-	}
-
-	std::cout << "max " << max << std::endl;
-
-	std::array<std::vector<float>, 4> imp;
-	for(int i = 0; i < 4; i++){
-		imp[i] = std::vector<float>(L);
-		std::cout << "Made " << i << std::endl;
-		for(int j = 0; j < L; j++)
-			imp[i][j] = tmp[i][j]/max;
-	}
-	return imp;
-}
-
-std::shared_ptr<Convproc> make_processor(std::array<std::vector<float>, 4>& imp, std::size_t buffersize) {
-	auto proc = std::make_shared<Convproc>();
-	proc->set_options(0);
-	proc->configure(
-		2, // # in channels
-		4, // # out channels
-		maxsize,
-		buffersize, // buffer size (quantum)
-		buffersize, // min partition
-		buffersize, // max partition
-		0.f); // density
-
-	auto L = imp[0].size();
-	proc->impdata_create(0,0,1,imp[0].data(),0,L);
-	proc->impdata_create(0,1,1,imp[1].data(),0,L);
-	proc->impdata_create(1,2,1,imp[2].data(),0,L);
-	proc->impdata_create(1,3,1,imp[3].data(),0,L);
-	return proc;
-}
 
 struct Reverb : public lvtk::Plugin<Reverb> {
 	constexpr static const char* URI = p_uri;
@@ -162,9 +172,8 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 	std::thread worker{[this]{
 		while(true){
 			if(update){
-				imp = make_impulses(pars, rate);
 				std::cout << "changing" << std::endl;
-				proc = make_processor(imp, pars.buffersize);
+				proc = pars.make_processor();
 				proc->start_process(0,0);
 				std::cout << "done" << std::endl;
 				update = false;
@@ -179,6 +188,7 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 	params pars;
 
 	std::array<std::vector<float>, 4> imp;
+	std::optional<std::future<std::shared_ptr<Convproc> > > new_proc;
 
 	std::shared_ptr<Convproc> proc;
 
@@ -208,37 +218,41 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 		pars2.atten = *port[p_atten];
 		pars2.dist = *port[p_dist];
 		pars2.buffersize = N;
+		pars2.rate = rate;
 
-		if(pars2 != pars && !update){
-			pars = pars2;
-			update = true;
+
+		if (pars != pars2)
+			new_proc.emplace(std::async(std::launch::async, [pars2](){
+				return pars2.make_processor();
+			}));
+
+		if (new_proc) {
+			if (new_proc->wait_for(0s) == std::future_status::ready) {
+				proc = new_proc->get();
+				proc->start_process(0, 0);
+			}
 		}
 
-		if(!update){
-			if(proc->state() == Convproc::ST_WAIT)
-				proc->check_stop();
+		if(proc->state() == Convproc::ST_WAIT)
+			proc->check_stop();
 
-			std::copy(xl, xl+N, proc->inpdata(0));
-			std::copy(xr, xr+N, proc->inpdata(1));
+		std::copy(xl, xl+N, proc->inpdata(0));
+		std::copy(xr, xr+N, proc->inpdata(1));
 
-			proc->process(false);
+		proc->process(false);
 
-			float* out[4];
-			for(int i = 0; i < 4; i++)
-				out[i] = proc->outdata(i);
+		float* out[4];
+		for(int i = 0; i < 4; i++)
+			out[i] = proc->outdata(i);
 
-			float gain = std::pow(10,*port[p_gain]/10);
-			float cross = std::pow(10,*port[p_cross]/10);
+		float gain = std::pow(10,*port[p_gain]/10);
+		float cross = std::pow(10,*port[p_cross]/10);
 
-			copy(out[0],yl,gain,N);
-			copy(out[2],yr,gain,N);
+		copy(out[0],yl,gain,N);
+		copy(out[2],yr,gain,N);
 
-			mix(yl,out[3],cross,N);
-			mix(yr,out[1],cross,N);
-		} else {
-			std::copy(xl,xl+N,yl);
-			std::copy(xr,xr+N,yr);
-		}
+		mix(yl,out[3],cross,N);
+		mix(yr,out[1],cross,N);
 	}
 };
 
