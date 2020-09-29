@@ -20,11 +20,14 @@ using namespace std::chrono;
 inline static constexpr double c_sound = 343;
 inline static constexpr uint32_t maxsize = 96000*20;
 
-using VectType = Eigen::VectorXf;
+using Vect = Eigen::Matrix<float, 1, Eigen::Dynamic, Eigen::RowMajor>;
+using MapVect = Eigen::Map<Vect>;
+template <std::size_t N>
+using VectMat = Eigen::Matrix<float, N, Eigen::Dynamic, Eigen::RowMajor>;
 
 template<class Eng>
-VectType poisson(uint32_t L, double s, uint32_t d, Eng& rd){
-	VectType v(L);
+Vect poisson(uint32_t L, double s, uint32_t d, Eng& rd){
+	Vect v(L);
 	for(int i = d; i < L+d; i++){
 		double b2 = double(i)*i - double(d)*d;
 		double a2 = b2 - d*d/4.0;
@@ -36,9 +39,9 @@ VectType poisson(uint32_t L, double s, uint32_t d, Eng& rd){
 }
 
 template<class Eng>
-VectType phase(const VectType& echos, Eng& rd){
+Vect phase(const Vect& echos, Eng& rd){
 	auto L = echos.size();
-	VectType v(L);
+	Vect v(L);
 	std::normal_distribution<double> dist(0,1);
 	for(int i = 0; i < L; i++)
 		v[i] = dist(rd)*sqrt(echos[i]);
@@ -55,29 +58,18 @@ void env(uint32_t d, double p, Vect& v){
 template <class Vect>
 void decay(double r, Vect& v){
 	auto L = v.size();
+	std::cout << "r " << r << std::endl;
 	for(int i = 0; i < L; i++)
 		v[i] *= exp(-r*i);
 }
 
 template<class Eng>
-VectType reverb(uint32_t L, uint32_t d, double s, double p, double r, Eng& rd){
+Vect reverb(uint32_t L, uint32_t d, double s, double p, double r, Eng& rd){
 	std::cout << "reverb" << std::endl;
 	auto x = phase(poisson(L,s,d,rd),rd);
 	env(d,p,x);
 	decay(r,x);
 	return x;
-}
-
-template <class T>
-void copy(T* v1, T* v2, T a, uint32_t N){
-	for(int i = 0; i < N; i++)
-		v2[i] = v1[i]*a;
-}
-
-template <class T>
-void mix(T* v1, T* v2, T a, uint32_t N){
-	for(int i = 0; i < N; i++)
-		v1[i] += v2[i]*a;
 }
 
 struct params {
@@ -105,7 +97,7 @@ struct params {
 		return !(operator==(p));
 	}
 
-	std::array<VectType, 4> make_impulses() const {
+	VectMat<4> make_impulses() const {
 		uint32_t d = uint32_t(dist/c_sound*rate);
 		double s = 1/m2_per_tree*(c_sound/rate)*(c_sound/rate);
 		double r = atten/10*log(10)/rate;
@@ -114,18 +106,11 @@ struct params {
 
 		std::minstd_rand dev(seed);
 
-		float max{0.0};
-		std::array<VectType, 4> imp;
+		VectMat<4> imp;
+		for(int i = 0; i < 4; i++)
+			imp.row(i) = reverb(L,d,s,p,r,dev);
 
-		for(int i = 0; i < 4; i++){
-			imp[i] = reverb(L,d,s,p,r,dev);
-			max = std::max(max, imp[i].cwiseAbs().maxCoeff());
-		}
-
-		std::cout << "max " << max << std::endl;
-
-		for(auto& imp_i : imp)
-			imp_i /= max;
+		imp /= imp.cwiseAbs().maxCoeff();
 		return imp;
 	}
 
@@ -142,11 +127,11 @@ struct params {
 			buffersize, // max partition
 			0.f); // density
 
-		auto L = imp[0].size();
-		proc->impdata_create(0,0,1,imp[0].data(),0,L);
-		proc->impdata_create(0,1,1,imp[1].data(),0,L);
-		proc->impdata_create(1,2,1,imp[2].data(),0,L);
-		proc->impdata_create(1,3,1,imp[3].data(),0,L);
+		auto L = imp.cols();
+		proc->impdata_create(0,0,1,imp.row(0).data(),0,L);
+		proc->impdata_create(0,1,1,imp.row(1).data(),0,L);
+		proc->impdata_create(1,2,1,imp.row(2).data(),0,L);
+		proc->impdata_create(1,3,1,imp.row(3).data(),0,L);
 		return proc;
 	}
 
@@ -158,9 +143,7 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 
 	params pars;
 
-	std::array<VectType, 4> imp;
 	std::optional<std::future<std::shared_ptr<Convproc> > > new_proc;
-
 	std::shared_ptr<Convproc> proc;
 
 	float* port[p_n_ports];
@@ -174,12 +157,11 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 		port[p] = static_cast<float*>(data);
 	}
 
-
 	void run(uint32_t N){
-		auto xl = port[p_left_in];
-		auto xr = port[p_right_in];
-		auto yl = port[p_left_out];
-		auto yr = port[p_right_out];
+		MapVect xl(port[p_left_in], N),
+			xr(port[p_right_in], N),
+			yl(port[p_left_out], N),
+			yr(port[p_right_out], N);
 
 		params pars2;
 		pars2.seed = uint32_t(*port[p_seed]);
@@ -207,23 +189,21 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 		if(proc->state() == Convproc::ST_WAIT)
 			proc->check_stop();
 
-		std::copy(xl, xl+N, proc->inpdata(0));
-		std::copy(xr, xr+N, proc->inpdata(1));
+		Vect::Map(proc->inpdata(0), N) = xl;
+		Vect::Map(proc->inpdata(1), N) = xr;
 
 		proc->process(false);
 
-		float* out[4];
-		for(int i = 0; i < 4; i++)
-			out[i] = proc->outdata(i);
+		MapVect o1(proc->outdata(0), N),
+			o2(proc->outdata(1), N),
+			o3(proc->outdata(2), N),
+			o4(proc->outdata(3), N);
 
 		float gain = std::pow(10,*port[p_gain]/10);
 		float cross = std::pow(10,*port[p_cross]/10);
 
-		copy(out[0],yl,gain,N);
-		copy(out[2],yr,gain,N);
-
-		mix(yl,out[3],cross,N);
-		mix(yr,out[1],cross,N);
+		yl = o1*gain + o3*cross;
+		yr = o2*gain + o4*cross;
 	}
 };
 
