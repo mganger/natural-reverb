@@ -5,15 +5,12 @@
 #include <future>
 #include <iostream>
 #include <random>
-#include <algorithm>
-#include <tuple>
 #include <chrono>
-#include <thread>
 #include <zita-convolver.h>
 #include <Eigen/Core>
 
 #include <lvtk/plugin.hpp>
-#include "reverb.peg"
+#include <reverb.peg>
 
 using namespace std::chrono;
 
@@ -174,7 +171,7 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 		pars2.rate = rate;
 
 
-		if (pars != pars2)
+		if (pars != pars2 && !new_proc)
 			new_proc.emplace(std::async(std::launch::async, [pars2](){
 				return pars2.make_processor();
 			}));
@@ -184,6 +181,7 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 				proc = new_proc->get();
 				proc->start_process(0, 0);
 			}
+			new_proc.reset();
 		}
 
 		if(proc->state() == Convproc::ST_WAIT)
@@ -201,6 +199,7 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 
 		float gain = std::pow(10,*port[p_gain]/10);
 		float cross = std::pow(10,*port[p_cross]/10);
+
 
 		yl = o1*gain + o3*cross;
 		yr = o2*gain + o4*cross;
