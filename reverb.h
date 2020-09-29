@@ -102,6 +102,7 @@ struct params {
 };
 
 inline static constexpr double c_sound = 343;
+inline static constexpr uint32_t maxsize = 96000*20;
 
 std::array<std::vector<float>, 4> make_impulses(const params& pars, const float rate) {
 	uint32_t d = uint32_t(pars.dist/c_sound*rate);
@@ -133,6 +134,25 @@ std::array<std::vector<float>, 4> make_impulses(const params& pars, const float 
 	return imp;
 }
 
+std::shared_ptr<Convproc> make_processor(std::array<std::vector<float>, 4>& imp, std::size_t buffersize) {
+	auto proc = std::make_shared<Convproc>();
+	proc->set_options(0);
+	proc->configure(
+		2, // # in channels
+		4, // # out channels
+		maxsize,
+		buffersize, // buffer size (quantum)
+		buffersize, // min partition
+		buffersize, // max partition
+		0.f); // density
+
+	auto L = imp[0].size();
+	proc->impdata_create(0,0,1,imp[0].data(),0,L);
+	proc->impdata_create(0,1,1,imp[1].data(),0,L);
+	proc->impdata_create(1,2,1,imp[2].data(),0,L);
+	proc->impdata_create(1,3,1,imp[3].data(),0,L);
+	return proc;
+}
 
 struct Reverb : public lvtk::Plugin<Reverb> {
 	constexpr static const char* URI = p_uri;
@@ -143,26 +163,10 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 		while(true){
 			if(update){
 				imp = make_impulses(pars, rate);
-				std::cout << "deleting" << std::endl;
-				delete proc;
-				std::cout << "creating" << std::endl;
-				proc = new Convproc;
-				proc->set_options(0);
-				proc->configure(
-					2, // # in channels
-					4, // # out channels
-					maxsize,
-					pars.buffersize, // buffer size (quantum)
-					pars.buffersize, // min partition
-					pars.buffersize, // max partition
-					0.f); // density
-
-				auto L = imp[0].size();
-				proc->impdata_create(0,0,1,imp[0].data(),0,L);
-				proc->impdata_create(0,1,1,imp[1].data(),0,L);
-				proc->impdata_create(1,2,1,imp[2].data(),0,L);
-				proc->impdata_create(1,3,1,imp[3].data(),0,L);
+				std::cout << "changing" << std::endl;
+				proc = make_processor(imp, pars.buffersize);
 				proc->start_process(0,0);
+				std::cout << "done" << std::endl;
 				update = false;
 			} else
 			{
@@ -171,13 +175,12 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 		}
 	}};
 
-	const uint32_t maxsize = 96000*20;
 
 	params pars;
 
 	std::array<std::vector<float>, 4> imp;
 
-	Convproc* proc = nullptr;
+	std::shared_ptr<Convproc> proc;
 
 	float* port[p_n_ports];
 
