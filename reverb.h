@@ -184,25 +184,27 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 			new_proc.reset();
 		}
 
-		if(proc->state() == Convproc::ST_WAIT)
-			proc->check_stop();
+		if (proc) {
+			if(proc->state() == Convproc::ST_WAIT)
+				proc->check_stop();
 
-		Vect::Map(proc->inpdata(0), N) = xl;
-		Vect::Map(proc->inpdata(1), N) = xr;
+			Vect::Map(proc->inpdata(0), N) = xl;
+			Vect::Map(proc->inpdata(1), N) = xr;
 
-		proc->process(false);
+			proc->process(false);
 
-		MapVect o1(proc->outdata(0), N),
-			o2(proc->outdata(1), N),
-			o3(proc->outdata(2), N),
-			o4(proc->outdata(3), N);
+			MapVect o1(proc->outdata(0), N),
+				o2(proc->outdata(1), N),
+				o3(proc->outdata(2), N),
+				o4(proc->outdata(3), N);
 
-		float gain = std::pow(10,*port[p_gain]/10);
-		float cross = std::pow(10,*port[p_cross]/10);
+			float gain = std::pow(10,*port[p_gain]/10);
+			float cross = std::pow(10,*port[p_cross]/10);
 
 
-		yl = o1*gain + o3*cross;
-		yr = o2*gain + o4*cross;
+			yl = o1*gain + o3*cross;
+			yr = o2*gain + o4*cross;
+		}
 	}
 };
 
