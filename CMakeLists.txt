@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 find_package(Boost COMPONENTS unit_test_framework REQUIRED)
 find_package(Threads REQUIRED)
+find_package (Eigen3 3.3 REQUIRED NO_MODULE)
 
 find_path(
 	LVTK_INCLUDE_DIR
@@ -31,6 +32,7 @@ set(reverb_headers
 	${LVTK_INCLUDE_DIR})
 set(reverb_libs
 	Threads::Threads
+	Eigen3::Eigen
 	-lzita-convolver)
 target_include_directories(reverb PRIVATE ${reverb_headers})
 target_link_libraries(reverb PRIVATE ${reverb_libs})

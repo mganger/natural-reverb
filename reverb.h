@@ -11,6 +11,7 @@
 #include <chrono>
 #include <thread>
 #include <zita-convolver.h>
+#include <Eigen/Core>
 
 #include <lvtk/plugin.hpp>
 #include "reverb.peg"
@@ -19,6 +20,8 @@ using namespace std::chrono;
 
 inline static constexpr double c_sound = 343;
 inline static constexpr uint32_t maxsize = 96000*20;
+
+using VectType = Eigen::VectorXf;
 
 template<class Eng>
 std::vector<uint32_t> poisson(uint32_t L, double s, uint32_t d, Eng& rd){
@@ -35,11 +38,11 @@ std::vector<uint32_t> poisson(uint32_t L, double s, uint32_t d, Eng& rd){
 }
 
 template<class Eng>
-std::vector<double> phase(const std::vector<uint32_t>& echos, Eng& rd){
+VectType phase(const std::vector<uint32_t>& echos, Eng& rd){
 	std::cout << "phase" << std::endl;
 	auto L = echos.size();
 	std::cout << L << std::endl;
-	std::vector<double> v(L);
+	VectType v(L);
 	std::normal_distribution<double> dist(0,1);
 	for(int i = 0; i < L; i++)
 		v[i] = dist(rd)*sqrt(echos[i]);
@@ -64,7 +67,7 @@ void decay(double r, Vect& v){
 }
 
 template<class Eng>
-std::vector<double> reverb(uint32_t L, uint32_t d, double s, double p, double r, Eng& rd){
+VectType reverb(uint32_t L, uint32_t d, double s, double p, double r, Eng& rd){
 	std::cout << "reverb" << std::endl;
 	auto x = phase(poisson(L,s,d,rd),rd);
 	env(d,p,x);
@@ -109,40 +112,33 @@ struct params {
 		return !(operator==(p));
 	}
 
+	std::array<VectType, 4> make_impulses() const {
+		uint32_t d = uint32_t(dist/c_sound*rate);
+		double s = 1/m2_per_tree*(c_sound/rate)*(c_sound/rate);
+		double r = atten/10*log(10)/rate;
+		uint32_t L = uint32_t(length*rate);
+		double p = decay;
 
-	std::array<std::vector<float>, 4> make_impulses(const params& pars) const {
-		uint32_t d = uint32_t(pars.dist/c_sound*pars.rate);
-		double s = 1/pars.m2_per_tree*(c_sound/pars.rate)*(c_sound/pars.rate);
-		double r = pars.atten/10*log(10)/pars.rate;
-		uint32_t L = uint32_t(pars.length*pars.rate);
-		double p = pars.decay;
+		std::minstd_rand dev(seed);
 
-		//std::mt19937 dev(pars.seed);
-		std::minstd_rand dev(pars.seed);
-
-		double max;
-		std::array<std::vector<double>, 4> tmp;
+		float max{0.0};
+		std::array<VectType, 4> imp;
 
 		for(int i = 0; i < 4; i++){
-			tmp[i] = reverb(L,d,s,p,r,dev);
-			max = std::max(max,*std::max_element(tmp[i].begin(), tmp[i].end()));
+			imp[i] = reverb(L,d,s,p,r,dev);
+			max = std::max(max, imp[i].cwiseAbs().maxCoeff());
 		}
 
 		std::cout << "max " << max << std::endl;
 
-		std::array<std::vector<float>, 4> imp;
-		for(int i = 0; i < 4; i++){
-			imp[i] = std::vector<float>(L);
-			std::cout << "Made " << i << std::endl;
-			for(int j = 0; j < L; j++)
-				imp[i][j] = tmp[i][j]/max;
-		}
+		for(auto& imp_i : imp)
+			imp_i /= max;
 		return imp;
 	}
 
 	std::shared_ptr<Convproc> make_processor() const {
 		auto proc = std::make_shared<Convproc>();
-		auto imp = make_impulses(*this);
+		auto imp = make_impulses();
 		proc->set_options(0);
 		proc->configure(
 			2, // # in channels
@@ -165,29 +161,11 @@ struct params {
 
 
 struct Reverb : public lvtk::Plugin<Reverb> {
-	constexpr static const char* URI = p_uri;
-
-
-	bool update = false;
-	std::thread worker{[this]{
-		while(true){
-			if(update){
-				std::cout << "changing" << std::endl;
-				proc = pars.make_processor();
-				proc->start_process(0,0);
-				std::cout << "done" << std::endl;
-				update = false;
-			} else
-			{
-				std::this_thread::sleep_for(std::chrono::milliseconds(1));
-			}
-		}
-	}};
-
+	inline constexpr static const char* URI = p_uri;
 
 	params pars;
 
-	std::array<std::vector<float>, 4> imp;
+	std::array<VectType, 4> imp;
 	std::optional<std::future<std::shared_ptr<Convproc> > > new_proc;
 
 	std::shared_ptr<Convproc> proc;
