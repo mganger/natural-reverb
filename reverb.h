@@ -1,7 +1,6 @@
 #pragma once
 #define __STDCPP_WANT_MATH_SPEC_FUNCS__ 1
 #include <cmath>
-#include <vector>
 #include <optional>
 #include <future>
 #include <iostream>
@@ -24,9 +23,8 @@ inline static constexpr uint32_t maxsize = 96000*20;
 using VectType = Eigen::VectorXf;
 
 template<class Eng>
-std::vector<uint32_t> poisson(uint32_t L, double s, uint32_t d, Eng& rd){
-	std::cout << "poisson" << std::endl;
-	std::vector<uint32_t> v(L);
+VectType poisson(uint32_t L, double s, uint32_t d, Eng& rd){
+	VectType v(L);
 	for(int i = d; i < L+d; i++){
 		double b2 = double(i)*i - double(d)*d;
 		double a2 = b2 - d*d/4.0;
@@ -38,10 +36,8 @@ std::vector<uint32_t> poisson(uint32_t L, double s, uint32_t d, Eng& rd){
 }
 
 template<class Eng>
-VectType phase(const std::vector<uint32_t>& echos, Eng& rd){
-	std::cout << "phase" << std::endl;
+VectType phase(const VectType& echos, Eng& rd){
 	auto L = echos.size();
-	std::cout << L << std::endl;
 	VectType v(L);
 	std::normal_distribution<double> dist(0,1);
 	for(int i = 0; i < L; i++)
@@ -51,7 +47,6 @@ VectType phase(const std::vector<uint32_t>& echos, Eng& rd){
 
 template <class Vect>
 void env(uint32_t d, double p, Vect& v){
-	std::cout << "env" << std::endl;
 	auto L = v.size();
 	for(int i = d; i < L+d; i++)
 		v[i-d] /= pow(i,p);
@@ -59,9 +54,7 @@ void env(uint32_t d, double p, Vect& v){
 
 template <class Vect>
 void decay(double r, Vect& v){
-	std::cout << "decay" << std::endl;
 	auto L = v.size();
-	std::cout << "r " << r << std::endl;
 	for(int i = 0; i < L; i++)
 		v[i] *= exp(-r*i);
 }
