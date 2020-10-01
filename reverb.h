@@ -48,7 +48,6 @@ struct Echos {
 
 	Arr reverb(uint32_t L, float d, float s, float p, float r){
 		auto idx = Arr::LinSpaced(L, 0, L-1);
-		assert(idx.cols() == L);
 		Arr idx_d = idx + d;
 
 		Arr echos = poisson(idx_d, s, d).sqrt();
