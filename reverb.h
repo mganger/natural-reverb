@@ -18,6 +18,7 @@ inline static constexpr float c_sound = 343;
 inline static constexpr uint32_t maxsize = 96000*20;
 
 using Vect = Eigen::Matrix<float, 1, Eigen::Dynamic, Eigen::RowMajor>;
+using Arr = Eigen::Array<float, 1, Eigen::Dynamic, Eigen::RowMajor>;
 using MapVect = Eigen::Map<Vect>;
 template <std::size_t N>
 using VectMat = Eigen::Matrix<float, N, Eigen::Dynamic, Eigen::RowMajor>;
@@ -28,42 +29,34 @@ struct Echos {
 
 	Echos(uint32_t seed) : rd(seed) {}
 
-	Vect poisson(uint32_t L, float s, uint32_t d){
-		Vect v(L);
-		for(int i = d; i < L+d; i++){
-			float b2 = float(i)*i - float(d)*d;
-			float a2 = b2 - d*d/4.0;
-			float arg = b2 > a2 ? 0 : sqrt(1 - b2/a2);
-			float lam = s*4*sqrt(a2)*std::comp_ellint_2(arg);
-			v[i-d] = std::poisson_distribution<uint32_t>(lam)(rd);
-		}
-		return v;
+	Arr poisson(const Arr& idx_d, float s, float d){
+		Arr b2 = idx_d.abs2() - d*d;
+		Arr a2 = b2 - d*d/4.0;
+		Arr arg = (1 - b2/a2).max(0).min(1).sqrt();
+		Arr lam = s*4*a2.sqrt()*arg.unaryExpr([](auto a) {
+			return std::comp_ellint_2(a);
+		});
+		return lam.unaryExpr([this](auto l){
+			return float(std::poisson_distribution<uint32_t>(l)(rd));
+		});
 	}
 
-	Vect phase(const Vect& echos){
-		auto L = echos.size();
-		std::normal_distribution<float> dist(0,1);
-		Vect::NullaryExpr n(L, [&rd](){return dist(gen);});
-		return echos.sqrt()*n;
+	Arr randn(std::size_t N) {
+		std::normal_distribution<float> dist(0, 1);
+		return Arr::NullaryExpr(N, [&dist, this](){return dist(rd);});
 	}
 
-	void env(uint32_t d, float p, Vect& v){
-		auto L = v.size();
-		for(int i = d; i < L+d; i++)
-			v[i-d] /= pow(i,p);
-	}
+	Arr reverb(uint32_t L, float d, float s, float p, float r){
+		auto idx = Arr::LinSpaced(L, 0, L-1);
+		assert(idx.cols() == L);
+		Arr idx_d = idx + d;
 
-	void decay(float r, Vect& v){
-		auto L = v.size();
-		for(int i = 0; i < L; i++)
-			v[i] *= exp(-r*i);
-	}
+		Arr echos = poisson(idx_d, s, d).sqrt();
+		Arr phase = randn(L);
+		Arr atten = (-r*idx).exp();
+		Arr env = idx_d.pow(p);
 
-	Vect reverb(uint32_t L, uint32_t d, float s, float p, float r){
-		auto x = phase(poisson(L,s,d));
-		env(d,p,x);
-		decay(r,x);
-		return x;
+		return echos*phase*atten*env;
 	}
 
 };
@@ -94,7 +87,7 @@ struct params {
 	}
 
 	VectMat<4> make_impulses() const {
-		uint32_t d = uint32_t(dist/c_sound*rate);
+		float d = dist/c_sound*rate;
 		float s = 1/m2_per_tree*(c_sound/rate)*(c_sound/rate);
 		float r = atten/10*log(10)/rate;
 		uint32_t L = uint32_t(length*rate);
