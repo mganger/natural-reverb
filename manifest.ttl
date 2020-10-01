@@ -1,0 +1,38 @@
+@prefix lv2:  <http://lv2plug.in/ns/lv2core#>.
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
+
+<http://ganger.webhop.org/plugins/input>
+  a lv2:Plugin;
+  rdfs:seeAlso <input.ttl>.
+
+<http://ganger.webhop.org/plugins/reverb2>
+  a lv2:Plugin;
+  rdfs:seeAlso <reverb2.ttl>.
+
+<http://ganger.webhop.org/plugins/linear_highpass>
+  a lv2:Plugin;
+  rdfs:seeAlso <linear_highpass.ttl>.
+
+<http://ganger.webhop.org/plugins/linear_lowpass>
+  a lv2:Plugin;
+  rdfs:seeAlso <linear_lowpass.ttl>.
+
+<http://ganger.webhop.org/plugins/linear_compressor>
+  a lv2:Plugin;
+  rdfs:seeAlso <linear_compressor.ttl>.
+
+<http://ganger.webhop.org/plugins/linear_multiband>
+  a lv2:Plugin;
+  rdfs:seeAlso <linear_multiband.ttl>.
+
+<http://ganger.webhop.org/plugins/hrtf_approx>
+  a lv2:Plugin;
+  rdfs:seeAlso <hrtf_approx.ttl>.
+
+<http://ganger.webhop.org/plugins/reverb3>
+  a lv2:Plugin;
+  rdfs:seeAlso <reverb3.ttl>.
+
+<http://ganger.webhop.org/plugins/two_band_compressor>
+  a lv2:Plugin;
+  rdfs:seeAlso <two_band_compressor.ttl>.
