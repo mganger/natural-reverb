@@ -8,9 +8,7 @@ struct Fixture {
 	static const int N = 256;
 	float input[2][N];
 	float output[2][N];
-	int seed = 23;
 	float length = 3;
-	float density = 0.5;
 	float decay = 2.1;
 	float atten = 0.1;
 	float dist = 15;
@@ -25,9 +23,7 @@ struct Fixture {
 		plugin.connect_port(p_right_in, input[1]);
 		plugin.connect_port(p_left_out, output[0]);
 		plugin.connect_port(p_right_out, output[1]);
-		plugin.connect_port(p_seed, &seed);
 		plugin.connect_port(p_length, &length);
-		plugin.connect_port(p_density, &density);
 		plugin.connect_port(p_decay, &decay);
 		plugin.connect_port(p_atten, &atten);
 		plugin.connect_port(p_dist, &dist);

@@ -20,7 +20,7 @@ inline static constexpr uint32_t maxsize = 96000*20;
 using Arr = Eigen::Array<float, 1, Eigen::Dynamic, Eigen::RowMajor>;
 using Map = Eigen::Map<Arr>;
 template <std::size_t N>
-using Arr2d = Eigen::Matrix<float, N, Eigen::Dynamic, Eigen::RowMajor>;
+using Arr2d = Eigen::Array<float, N, Eigen::Dynamic, Eigen::RowMajor>;
 
 struct Echos {
 
@@ -29,36 +29,35 @@ struct Echos {
 
 	Echos(uint32_t seed) : rd(seed), dist(0, 1) {}
 
-	Arr ellipse_radius(const Arr& idx_d, float s, float d){
+	Arr ellipse_radius(const Arr& idx_d, float d){
 		Arr b2 = idx_d.abs2() - d*d;
 		Arr a2 = b2 - d*d/4.0;
 		Arr arg = (1 - b2/a2).max(0).min(1).sqrt();
-		return s*4*a2.sqrt()*arg.unaryExpr([](auto a) {
+		return a2.sqrt()*arg.unaryExpr([](auto a) {
 			return std::comp_ellint_2(a);
 		});
 	}
 
-	Arr randn(std::size_t N) {
-		return Arr::NullaryExpr(N, [this](){return dist(rd);});
+	Arr2d<4> randn(std::size_t N) {
+		return Arr2d<4>::NullaryExpr(4, N, [this](){return dist(rd);});
 	}
 
-	Arr reverb(uint32_t L, float d, float s, float p, float r){
+	Arr2d<4> reverb(uint32_t L, float d, float p, float r){
 		auto idx = Arr::LinSpaced(L, 0, L-1);
 		Arr idx_d = idx + d;
 
-		Arr rad = ellipse_radius(idx_d, s, d);
-		Arr echos = randn(L)*rad.sqrt();
-		Arr env = (p*idx_d.log() - r*idx).exp();
+		Arr rad = ellipse_radius(idx_d, d);
+		Arr env = rad.sqrt()*(p*idx_d.log() - r*idx).exp();
+		env *= 1/env.maxCoeff();
+		Arr2d<4> echos = randn(L);
 
-		return echos*env;
+		return echos.rowwise()*env;
 	}
 
 };
 
 struct params {
-	uint32_t seed;
 	float length;
-	float m2_per_tree;
 	float decay;
 	float atten;
 	float dist;
@@ -66,9 +65,7 @@ struct params {
 	uint32_t buffersize;
 
 	bool operator==(const params& p){
-		return seed == p.seed &&
-		length == p.length &&
-		m2_per_tree == p.m2_per_tree &&
+		return length == p.length &&
 		decay == p.decay &&
 		atten == p.atten &&
 		dist == p.dist &&
@@ -82,18 +79,12 @@ struct params {
 
 	Arr2d<4> make_impulses() const {
 		float d = dist/c_sound*rate;
-		float s = 1/m2_per_tree*(c_sound/rate)*(c_sound/rate);
 		float r = atten/10*log(10)/rate;
 		uint32_t L(length*rate);
 		float p = decay;
 
-
-		Arr2d<4> imp(4, L);
-		for(int i = 0; i < 4; i++)
-			imp.row(i) = Echos(seed).reverb(L,d,s,p,r);
-
-		imp /= imp.cwiseAbs().maxCoeff();
-		return imp;
+		auto seed = std::hash<float>()(dist);
+		return Echos(seed).reverb(L,d,p,r);
 	}
 
 	std::shared_ptr<Convproc> make_processor() const {
@@ -146,9 +137,7 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 			yr(port[p_right_out], N);
 
 		params pars2{
-			.seed = uint32_t(*port[p_seed]),
 			.length = *port[p_length],
-			.m2_per_tree = *port[p_density],
 			.decay = *port[p_decay],
 			.atten = *port[p_atten],
 			.dist = *port[p_dist],
