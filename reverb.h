@@ -17,45 +17,40 @@ using namespace std::chrono;
 inline static constexpr float c_sound = 343;
 inline static constexpr uint32_t maxsize = 96000*20;
 
-using Vect = Eigen::Matrix<float, 1, Eigen::Dynamic, Eigen::RowMajor>;
 using Arr = Eigen::Array<float, 1, Eigen::Dynamic, Eigen::RowMajor>;
-using MapVect = Eigen::Map<Vect>;
+using Map = Eigen::Map<Arr>;
 template <std::size_t N>
-using VectMat = Eigen::Matrix<float, N, Eigen::Dynamic, Eigen::RowMajor>;
+using Arr2d = Eigen::Matrix<float, N, Eigen::Dynamic, Eigen::RowMajor>;
 
 struct Echos {
 
 	std::minstd_rand rd;
+	std::normal_distribution<float> dist;
 
-	Echos(uint32_t seed) : rd(seed) {}
+	Echos(uint32_t seed) : rd(seed), dist(0, 1) {}
 
-	Arr poisson(const Arr& idx_d, float s, float d){
+	Arr ellipse_radius(const Arr& idx_d, float s, float d){
 		Arr b2 = idx_d.abs2() - d*d;
 		Arr a2 = b2 - d*d/4.0;
 		Arr arg = (1 - b2/a2).max(0).min(1).sqrt();
-		Arr lam = s*4*a2.sqrt()*arg.unaryExpr([](auto a) {
+		return s*4*a2.sqrt()*arg.unaryExpr([](auto a) {
 			return std::comp_ellint_2(a);
-		});
-		return lam.unaryExpr([this](auto l){
-			return float(std::poisson_distribution<uint32_t>(l)(rd));
 		});
 	}
 
 	Arr randn(std::size_t N) {
-		std::normal_distribution<float> dist(0, 1);
-		return Arr::NullaryExpr(N, [&dist, this](){return dist(rd);});
+		return Arr::NullaryExpr(N, [this](){return dist(rd);});
 	}
 
 	Arr reverb(uint32_t L, float d, float s, float p, float r){
 		auto idx = Arr::LinSpaced(L, 0, L-1);
 		Arr idx_d = idx + d;
 
-		Arr echos = poisson(idx_d, s, d).sqrt();
-		Arr phase = randn(L);
-		Arr atten = (-r*idx).exp();
-		Arr env = idx_d.pow(p);
+		Arr rad = ellipse_radius(idx_d, s, d);
+		Arr echos = randn(L)*rad.sqrt();
+		Arr env = (p*idx_d.log() - r*idx).exp();
 
-		return echos*phase*atten*env;
+		return echos*env;
 	}
 
 };
@@ -85,15 +80,15 @@ struct params {
 		return !(operator==(p));
 	}
 
-	VectMat<4> make_impulses() const {
+	Arr2d<4> make_impulses() const {
 		float d = dist/c_sound*rate;
 		float s = 1/m2_per_tree*(c_sound/rate)*(c_sound/rate);
 		float r = atten/10*log(10)/rate;
-		uint32_t L = uint32_t(length*rate);
+		uint32_t L(length*rate);
 		float p = decay;
 
 
-		VectMat<4> imp(4, L);
+		Arr2d<4> imp(4, L);
 		for(int i = 0; i < 4; i++)
 			imp.row(i) = Echos(seed).reverb(L,d,s,p,r);
 
@@ -145,7 +140,7 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 	}
 
 	void run(uint32_t N){
-		MapVect xl(port[p_left_in], N),
+		Map xl(port[p_left_in], N),
 			xr(port[p_right_in], N),
 			yl(port[p_left_out], N),
 			yr(port[p_right_out], N);
@@ -179,12 +174,12 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 			if(proc->state() == Convproc::ST_WAIT)
 				proc->check_stop();
 
-			MapVect(proc->inpdata(0), N) = xl;
-			MapVect(proc->inpdata(1), N) = xr;
+			Map(proc->inpdata(0), N) = xl;
+			Map(proc->inpdata(1), N) = xr;
 
 			proc->process(false);
 
-			MapVect o1(proc->outdata(0), N),
+			Map o1(proc->outdata(0), N),
 				o2(proc->outdata(1), N),
 				o3(proc->outdata(2), N),
 				o4(proc->outdata(3), N);

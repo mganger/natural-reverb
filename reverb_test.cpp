@@ -9,7 +9,7 @@ struct Fixture {
 	float input[2][N];
 	float output[2][N];
 	int seed = 23;
-	float length = 1;
+	float length = 3;
 	float density = 0.5;
 	float decay = 2.1;
 	float atten = 0.1;
