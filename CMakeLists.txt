@@ -6,7 +6,7 @@ set(CMAKE_CPP_COMPILER g++)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -funroll-loops -march=native -mfpmath=sse")
 
 find_package(Boost COMPONENTS unit_test_framework REQUIRED)
 find_package(Threads REQUIRED)
