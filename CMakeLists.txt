@@ -10,7 +10,9 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -funroll-loops -march=native -mfpmath=sse")
 
 find_package(Boost COMPONENTS unit_test_framework REQUIRED)
 find_package(Threads REQUIRED)
-find_package (Eigen3 3.3 REQUIRED NO_MODULE)
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+set(LV2_DIR /usr/lib64/lv2)
+set(install_dir ${LV2_DIR}/natural_reverb.lv2)
 
 find_path(
 	LVTK_INCLUDE_DIR
@@ -25,8 +27,7 @@ add_custom_command(
 	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/reverb.ttl
 	BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/reverb.peg)
 
-
-add_library(reverb OBJECT reverb.cpp reverb.peg)
+add_library(reverb SHARED reverb.cpp reverb.peg)
 set(reverb_headers
 	${CMAKE_CURRENT_SOURCE_DIR}
 	${CMAKE_CURRENT_BINARY_DIR}
@@ -37,6 +38,12 @@ set(reverb_libs
 	-lzita-convolver)
 target_include_directories(reverb PRIVATE ${reverb_headers})
 target_link_libraries(reverb PRIVATE ${reverb_libs})
+install(TARGETS reverb
+	DESTINATION ${install_dir})
+install(FILES
+	${CMAKE_CURRENT_SOURCE_DIR}/reverb.ttl
+	${CMAKE_CURRENT_SOURCE_DIR}/manifest.ttl
+	DESTINATION ${install_dir})
 
 set_source_files_properties(reverb.ttl PROPERTIES LANGUAGE TTL)
 

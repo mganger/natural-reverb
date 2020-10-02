@@ -15,12 +15,13 @@
 using namespace std::chrono;
 
 inline static constexpr float c_sound = 343;
-inline static constexpr uint32_t maxsize = 96000*20;
 
 using Arr = Eigen::Array<float, 1, Eigen::Dynamic, Eigen::RowMajor>;
 using Map = Eigen::Map<Arr>;
 template <std::size_t N>
 using Arr2d = Eigen::Array<float, N, Eigen::Dynamic, Eigen::RowMajor>;
+template <std::size_t N>
+using Mat2d = Eigen::Matrix<float, N, Eigen::Dynamic, Eigen::RowMajor>;
 
 struct Echos {
 
@@ -38,18 +39,18 @@ struct Echos {
 		});
 	}
 
-	Arr2d<4> randn(std::size_t N) {
-		return Arr2d<4>::NullaryExpr(4, N, [this](){return dist(rd);});
+	Arr2d<2> randn(std::size_t N) {
+		return Arr2d<2>::NullaryExpr(2, N, [this](){return dist(rd);});
 	}
 
-	Arr2d<4> reverb(uint32_t L, float d, float p, float r){
+	Arr2d<2> reverb(uint32_t L, float d, float p, float r){
 		auto idx = Arr::LinSpaced(L, 0, L-1);
 		Arr idx_d = idx + d;
 
 		Arr rad = ellipse_radius(idx_d, d);
 		Arr env = rad.sqrt()*(p*idx_d.log() - r*idx).exp();
 		env *= 1/env.maxCoeff();
-		Arr2d<4> echos = randn(L);
+		Arr2d<2> echos = randn(L);
 
 		return echos.rowwise()*env;
 	}
@@ -77,7 +78,7 @@ struct params {
 		return !(operator==(p));
 	}
 
-	Arr2d<4> make_impulses() const {
+	Arr2d<2> make_impulses() const {
 		float d = dist/c_sound*rate;
 		float r = atten/10*log(10)/rate;
 		uint32_t L(length*rate);
@@ -87,13 +88,14 @@ struct params {
 		return Echos(seed).reverb(L,d,p,r);
 	}
 
-	std::shared_ptr<Convproc> make_processor() const {
+	std::shared_ptr<Convproc> operator()() const {
 		auto proc = std::make_shared<Convproc>();
 		auto imp = make_impulses();
+		std::size_t maxsize(p_ports[p_length].max);
 		proc->set_options(0);
 		proc->configure(
 			2, // # in channels
-			4, // # out channels
+			2, // # out channels
 			maxsize,
 			buffersize, // buffer size (quantum)
 			buffersize, // min partition
@@ -102,9 +104,7 @@ struct params {
 
 		auto L = imp.cols();
 		proc->impdata_create(0,0,1,imp.row(0).data(),0,L);
-		proc->impdata_create(0,1,1,imp.row(1).data(),0,L);
-		proc->impdata_create(1,2,1,imp.row(2).data(),0,L);
-		proc->impdata_create(1,3,1,imp.row(3).data(),0,L);
+		proc->impdata_create(1,1,1,imp.row(1).data(),0,L);
 		return proc;
 	}
 
@@ -131,11 +131,6 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 	}
 
 	void run(uint32_t N){
-		Map xl(port[p_left_in], N),
-			xr(port[p_right_in], N),
-			yl(port[p_left_out], N),
-			yr(port[p_right_out], N);
-
 		params pars2{
 			.length = *port[p_length],
 			.decay = *port[p_decay],
@@ -146,10 +141,10 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 		};
 
 
-		if (pars != pars2 && !new_proc)
-			new_proc.emplace(std::async(std::launch::async, [pars2](){
-				return pars2.make_processor();
-			}));
+		if (pars != pars2 && !new_proc) {
+			pars = pars2;
+			new_proc.emplace(std::async(std::launch::async, pars2));
+		}
 
 		if (new_proc) {
 			if (new_proc->wait_for(0s) == std::future_status::ready) {
@@ -159,30 +154,35 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 			}
 		}
 
+		Mat2d<2> x(2, N);
+		x << Map(port[p_left_in], N),
+		     Map(port[p_right_in], N);
+		x = (!x.array().isFinite()).select(x, 0);
+
 		if (proc) {
 			if(proc->state() == Convproc::ST_WAIT)
 				proc->check_stop();
 
-			Map(proc->inpdata(0), N) = xl;
-			Map(proc->inpdata(1), N) = xr;
+			float gain = std::pow(10,*port[p_gain]/20);
+			float cross = std::pow(10,*port[p_cross]/20);
+
+			Mat2d<2> mix(2, 2);
+			mix << gain, cross,
+			       cross, gain;
+
+			Arr2d<2> mixed = (mix*x).array();
+
+			Map(proc->inpdata(0), N) = mixed.row(0);
+			Map(proc->inpdata(1), N) = mixed.row(1);
 
 			proc->process(false);
 
-			Map o1(proc->outdata(0), N),
-				o2(proc->outdata(1), N),
-				o3(proc->outdata(2), N),
-				o4(proc->outdata(3), N);
-
-			float gain = std::pow(10,*port[p_gain]/10);
-			float cross = std::pow(10,*port[p_cross]/10);
-
-
-			yl = o1*gain + o3*cross;
-			yr = o2*gain + o4*cross;
-		} else {
-			yl = xl;
-			yr = xr;
+			x << Map(proc->outdata(0), N),
+			     Map(proc->outdata(1), N);
 		}
+
+		Map(port[p_left_out], N) = x.row(0).array();
+		Map(port[p_right_out], N) = x.row(1).array();
 	}
 };
 

@@ -62,6 +62,13 @@ BOOST_AUTO_TEST_CASE(changed) {
 	BOOST_CHECK(!plugin.new_proc);
 	plugin.run(N);
 	BOOST_CHECK(plugin.new_proc);
+	BOOST_CHECK(plugin.pars.length == 2);
+}
+
+BOOST_AUTO_TEST_CASE(io_same) {
+	plugin.connect_port(p_left_out, input[0]);
+	plugin.connect_port(p_right_out, input[1]);
+	plugin.run(N);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
