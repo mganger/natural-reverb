@@ -88,21 +88,27 @@ struct params {
 		return Echos(seed).reverb(L,d,p,r);
 	}
 
-	std::shared_ptr<Convproc> operator()() const {
-		auto proc = std::make_shared<Convproc>();
+	std::unique_ptr<Convproc> operator()() const {
 		auto imp = make_impulses();
-		std::size_t maxsize(p_ports[p_length].max);
+		uint32_t maxsize(p_ports[p_length].max*rate);
+
+		auto proc = std::make_unique<Convproc>();
+		auto L = imp.cols();
 		proc->set_options(0);
-		proc->configure(
+		auto result = proc->configure(
 			2, // # in channels
 			2, // # out channels
-			maxsize,
+			L,
 			buffersize, // buffer size (quantum)
 			buffersize, // min partition
 			buffersize, // max partition
 			0.f); // density
 
-		auto L = imp.cols();
+		if (result) {
+			std::cout << "Error creating processor" << std::endl;
+			return nullptr;
+		}
+
 		proc->impdata_create(0,0,1,imp.row(0).data(),0,L);
 		proc->impdata_create(1,1,1,imp.row(1).data(),0,L);
 		return proc;
@@ -116,14 +122,14 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 
 	params pars;
 
-	std::optional<std::future<std::shared_ptr<Convproc> > > new_proc;
-	std::shared_ptr<Convproc> proc;
+	std::future<std::unique_ptr<Convproc> > new_proc;
+	std::unique_ptr<Convproc> proc;
 
 	float* port[p_n_ports];
 
 	float rate;
 	Reverb(const lvtk::Args& args_) :
-		Plugin(args_), rate(args_.sample_rate)
+		Plugin(args_), rate(args_.sample_rate), proc(), new_proc()
 	{}
 
 	void connect_port (uint32_t p, void* data) {
@@ -141,16 +147,17 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 		};
 
 
-		if (pars != pars2 && !new_proc) {
+		if ((!proc || pars != pars2) && !new_proc.valid()) {
 			pars = pars2;
-			new_proc.emplace(std::async(std::launch::async, pars2));
+			new_proc = std::async(std::launch::async, pars2);
 		}
 
-		if (new_proc) {
-			if (new_proc->wait_for(0s) == std::future_status::ready) {
-				proc = new_proc->get();
-				proc->start_process(0, 0);
-				new_proc.reset();
+		if (new_proc.valid()) {
+			if (new_proc.wait_for(0s) == std::future_status::ready) {
+				if(auto new_proc_ptr = new_proc.get()) {
+					proc = std::move(new_proc_ptr);
+					proc->start_process(0, 0);
+				}
 			}
 		}
 

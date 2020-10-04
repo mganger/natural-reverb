@@ -37,10 +37,10 @@ BOOST_FIXTURE_TEST_SUITE(reverb_tests, Fixture)
 
 BOOST_AUTO_TEST_CASE(simple) {
 	BOOST_CHECK(!plugin.proc);
-	BOOST_CHECK(!plugin.new_proc);
+	BOOST_CHECK(!plugin.new_proc.valid());
 	plugin.run(N);
 	BOOST_CHECK(!plugin.proc);
-	BOOST_CHECK(plugin.new_proc);
+	BOOST_CHECK(plugin.new_proc.valid());
 }
 
 BOOST_AUTO_TEST_CASE(no_change) {
@@ -48,7 +48,8 @@ BOOST_AUTO_TEST_CASE(no_change) {
 	plugin.run(N);
 	BOOST_CHECK(!plugin.proc);
 	BOOST_TEST_CHECKPOINT("After first run");
-	plugin.new_proc->wait();
+	BOOST_CHECK(plugin.new_proc.valid());
+	plugin.new_proc.wait();
 	BOOST_TEST_CHECKPOINT("After ready");
 	plugin.run(N);
 	BOOST_CHECK(plugin.proc);
@@ -56,12 +57,12 @@ BOOST_AUTO_TEST_CASE(no_change) {
 
 BOOST_AUTO_TEST_CASE(changed) {
 	plugin.run(N);
-	plugin.new_proc->wait();
+	plugin.new_proc.wait();
 	plugin.run(N);
 	length = 2;
-	BOOST_CHECK(!plugin.new_proc);
+	BOOST_CHECK(!plugin.new_proc.valid());
 	plugin.run(N);
-	BOOST_CHECK(plugin.new_proc);
+	BOOST_CHECK(plugin.new_proc.valid());
 	BOOST_CHECK(plugin.pars.length == 2);
 }
 
