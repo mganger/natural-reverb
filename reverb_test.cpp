@@ -72,4 +72,13 @@ BOOST_AUTO_TEST_CASE(io_same) {
 	plugin.run(N);
 }
 
+BOOST_AUTO_TEST_CASE(numbers) {
+	auto rev = Echos(0).reverb(1000, 100, 2, 0.0001);
+	BOOST_CHECK(rev.maxCoeff() < 5);
+	BOOST_CHECK(rev.isFinite().all());
+
+	auto rad = Echos(0).ellipse_radius(Arr::LinSpaced(1000, 0, 999)+100, 100);
+	BOOST_CHECK(rad.isFinite().all());
+}
+
 BOOST_AUTO_TEST_SUITE_END()

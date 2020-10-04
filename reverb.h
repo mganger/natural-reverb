@@ -1,7 +1,6 @@
 #pragma once
 #define __STDCPP_WANT_MATH_SPEC_FUNCS__ 1
 #include <cmath>
-#include <optional>
 #include <future>
 #include <iostream>
 #include <random>
@@ -30,9 +29,9 @@ struct Echos {
 
 	Echos(uint32_t seed) : rd(seed), dist(0, 1) {}
 
-	Arr ellipse_radius(const Arr& idx_d, float d){
-		Arr b2 = idx_d.abs2() - d*d;
-		Arr a2 = b2 - d*d/4.0;
+	Arr ellipse_radius(const Arr& idx, float d){
+		Arr b2 = idx*(idx + d);
+		Arr a2 = (b2 - d*d/4.0).max(1e-30);
 		Arr arg = (1 - b2/a2).max(0).min(1).sqrt();
 		return a2.sqrt()*arg.unaryExpr([](auto a) {
 			return std::comp_ellint_2(a);
@@ -45,10 +44,9 @@ struct Echos {
 
 	Arr2d<2> reverb(uint32_t L, float d, float p, float r){
 		auto idx = Arr::LinSpaced(L, 0, L-1);
-		Arr idx_d = idx + d;
 
-		Arr rad = ellipse_radius(idx_d, d);
-		Arr env = rad.sqrt()*(p*idx_d.log() - r*idx).exp();
+		Arr rad = ellipse_radius(idx, d);
+		Arr env = rad.sqrt()*(-p*(idx+d).log() - r*idx).exp();
 		env *= 1/env.maxCoeff();
 		Arr2d<2> echos = randn(L);
 
@@ -152,19 +150,17 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 			new_proc = std::async(std::launch::async, pars2);
 		}
 
-		if (new_proc.valid()) {
-			if (new_proc.wait_for(0s) == std::future_status::ready) {
-				if(auto new_proc_ptr = new_proc.get()) {
-					proc = std::move(new_proc_ptr);
-					proc->start_process(0, 0);
-				}
+		if (new_proc.valid() && new_proc.wait_for(0s) == std::future_status::ready) {
+			if(auto new_proc_ptr = new_proc.get()) {
+				proc = std::move(new_proc_ptr);
+				proc->start_process(0, 0);
 			}
 		}
 
 		Mat2d<2> x(2, N);
 		x << Map(port[p_left_in], N),
 		     Map(port[p_right_in], N);
-		x = (!x.array().isFinite()).select(x, 0);
+		x = x.array().isFinite().select(x, 0);
 
 		if (proc) {
 			if(proc->state() == Convproc::ST_WAIT)
