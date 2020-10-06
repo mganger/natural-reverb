@@ -22,38 +22,28 @@ using Arr2d = Eigen::Array<float, N, Eigen::Dynamic, Eigen::RowMajor>;
 template <std::size_t N>
 using Mat2d = Eigen::Matrix<float, N, Eigen::Dynamic, Eigen::RowMajor>;
 
-struct Echos {
+inline static std::minstd_rand rd(12345);
+inline static std::normal_distribution<float> dist;
+inline static const std::size_t MAX_L = p_ports[p_length].max*192000;
+inline static const Arr2d<2> randn = Arr2d<2>::NullaryExpr(2, MAX_L, [](){return dist(rd);});
 
-	std::minstd_rand rd;
-	std::normal_distribution<float> dist;
+template <class T>
+Arr ellipse_integral(const T& t, float d){
+	Arr b2 = t*(t + d);
+	Arr a2 = (b2 - d*d/4.0).max(1e-30);
+	Arr arg = (1 - b2/a2).max(0).min(1).sqrt();
+	return a2.sqrt()*arg.unaryExpr([](auto a) {
+		return std::comp_ellint_2(a);
+	});
+}
 
-	Echos(uint32_t seed) : rd(seed), dist(0, 1) {}
-
-	Arr ellipse_radius(const Arr& idx, float d){
-		Arr b2 = idx*(idx + d);
-		Arr a2 = (b2 - d*d/4.0).max(1e-30);
-		Arr arg = (1 - b2/a2).max(0).min(1).sqrt();
-		return a2.sqrt()*arg.unaryExpr([](auto a) {
-			return std::comp_ellint_2(a);
-		});
-	}
-
-	Arr2d<2> randn(std::size_t N) {
-		return Arr2d<2>::NullaryExpr(2, N, [this](){return dist(rd);});
-	}
-
-	Arr2d<2> reverb(uint32_t L, float d, float p, float r){
-		auto idx = Arr::LinSpaced(L, 0, L-1);
-
-		Arr rad = ellipse_radius(idx, d);
-		Arr env = rad.sqrt()*(-p*(idx+d).log() - r*idx).exp();
-		env *= 1/env.maxCoeff();
-		Arr2d<2> echos = randn(L);
-
-		return echos.rowwise()*env;
-	}
-
-};
+Arr2d<2> reverb(uint32_t L, float d, float p, float r){
+	auto t = Arr::LinSpaced(L, 0, L-1);
+	Arr rad = ellipse_integral(t, d);
+	Arr env = rad.sqrt()*(-p*(t+d).log() - r*t).exp();
+	Arr2d<2> imp = randn.block(0, 0, 2, L).rowwise()*env;
+	return imp.matrix().rowwise().normalized().array();
+}
 
 struct params {
 	float length;
@@ -63,32 +53,26 @@ struct params {
 	float rate;
 	uint32_t buffersize;
 
-	bool operator==(const params& p){
-		return length == p.length &&
-		decay == p.decay &&
-		atten == p.atten &&
-		dist == p.dist &&
-		buffersize == p.buffersize &&
-		rate == p.rate;
-	}
-
 	bool operator!=(const params& p){
-		return !(operator==(p));
+		return length != p.length ||
+		decay != p.decay ||
+		atten != p.atten ||
+		dist != p.dist ||
+		buffersize != p.buffersize ||
+		rate != p.rate;
 	}
 
 	Arr2d<2> make_impulses() const {
 		float d = dist/c_sound*rate;
-		float r = atten/10*log(10)/rate;
+		float r = atten/20*log(10)/rate;
 		uint32_t L(length*rate);
 		float p = decay;
 
-		auto seed = std::hash<float>()(dist);
-		return Echos(seed).reverb(L,d,p,r);
+		return reverb(L,d,p,r);
 	}
 
 	std::unique_ptr<Convproc> operator()() const {
 		auto imp = make_impulses();
-		uint32_t maxsize(p_ports[p_length].max*rate);
 
 		auto proc = std::make_unique<Convproc>();
 		auto L = imp.cols();
@@ -107,8 +91,8 @@ struct params {
 			return nullptr;
 		}
 
-		proc->impdata_create(0,0,1,imp.row(0).data(),0,L);
-		proc->impdata_create(1,1,1,imp.row(1).data(),0,L);
+		for (auto i : {0, 1})
+			proc->impdata_create(i, i, 1, imp.row(i).data(), 0, L);
 		return proc;
 	}
 
@@ -135,6 +119,9 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 	}
 
 	void run(uint32_t N){
+		if (N == 0)
+			return;
+
 		params pars2{
 			.length = *port[p_length],
 			.decay = *port[p_decay],
@@ -145,7 +132,7 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 		};
 
 
-		if ((!proc || pars != pars2) && !new_proc.valid()) {
+		if ((!proc || (pars != pars2)) && !new_proc.valid()) {
 			pars = pars2;
 			new_proc = std::async(std::launch::async, pars2);
 		}
