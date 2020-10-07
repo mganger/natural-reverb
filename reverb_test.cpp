@@ -63,7 +63,15 @@ BOOST_AUTO_TEST_CASE(changed) {
 	BOOST_CHECK(!plugin.new_proc.valid());
 	plugin.run(N);
 	BOOST_CHECK(plugin.new_proc.valid());
+	plugin.new_proc.wait();
+	plugin.run(N);
 	BOOST_CHECK(plugin.pars.length == 2);
+}
+
+BOOST_AUTO_TEST_CASE(buffer_changed) {
+	plugin.run(N);
+	plugin.new_proc.wait();
+	plugin.run(N*2);
 }
 
 BOOST_AUTO_TEST_CASE(io_same) {

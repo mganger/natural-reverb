@@ -47,6 +47,8 @@ Arr2d<2> reverb(uint32_t L, float d, float p, float r){
 }
 
 struct params {
+	using Result = std::tuple<params, std::unique_ptr<Convproc>>;
+
 	float length;
 	float decay;
 	float atten;
@@ -72,7 +74,7 @@ struct params {
 		return reverb(L,d,p,r);
 	}
 
-	std::unique_ptr<Convproc> operator()() const {
+	Result operator()() const {
 		auto imp = make_impulses();
 
 		auto proc = std::make_unique<Convproc>();
@@ -89,12 +91,13 @@ struct params {
 
 		if (result) {
 			std::cout << "Error creating processor" << std::endl;
-			return nullptr;
+			proc = nullptr;
+		} else {
+			for (auto i : {0, 1})
+				proc->impdata_create(i, i, 1, imp.row(i).data(), 0, L);
 		}
 
-		for (auto i : {0, 1})
-			proc->impdata_create(i, i, 1, imp.row(i).data(), 0, L);
-		return proc;
+		return std::make_tuple(*this, std::move(proc));
 	}
 
 };
@@ -133,18 +136,21 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 			.buffersize = N,
 		};
 
-
 		if ((!proc || (pars != pars2)) && !new_proc.valid()) {
-			pars = pars2;
 			new_proc = std::async(std::launch::async, pars2);
 		}
 
 		if (new_proc.valid() && new_proc.wait_for(0s) == std::future_status::ready) {
-			if(auto new_proc_ptr = new_proc.get()) {
+			auto [new_pars, new_proc_ptr] = new_proc.get();
+			if(new_proc_ptr) {
 				proc = std::move(new_proc_ptr);
+				pars = new_pars;
 				proc->start_process(0, 0);
 			}
 		}
+
+		if (N != pars.buffersize)
+			return;
 
 		Mat2d<2> x(2, N);
 		x << Map(port[p_left_in], N),

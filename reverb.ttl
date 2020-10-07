@@ -1,8 +1,9 @@
-@prefix lv2:  <http://lv2plug.in/ns/lv2core#>.
-@prefix atom: <http://lv2plug.in/ns/ext/atom#> .
-@prefix time: <http://lv2plug.in/ns/ext/time#> .
-@prefix doap: <http://usefulinc.com/ns/doap#>.
-@prefix ll:   <http://ll-plugins.nongnu.org/lv2/namespace#>.
+@prefix lv2:   <http://lv2plug.in/ns/lv2core#>.
+@prefix atom:  <http://lv2plug.in/ns/ext/atom#> .
+@prefix time:  <http://lv2plug.in/ns/ext/time#> .
+@prefix doap:  <http://usefulinc.com/ns/doap#>.
+@prefix ll:    <http://ll-plugins.nongnu.org/lv2/namespace#>.
+@prefix bufsz: <http://lv2plug.in/ns/ext/buf-size#>.
 
 <https://michaelganger.org/plugins/natural_reverb>
 	a lv2:Plugin ;
@@ -10,6 +11,7 @@
 	doap:name "Natural Reverb" ;
 	doap:license <http://usefulinc.com/doap/licenses/gpl> ;
 	ll:pegName "p" ;
+	lv2:optionalFeature bufsz:coarseBlockLength ;
 
 	lv2:port [
 		a lv2:AudioPort, lv2:InputPort ;
