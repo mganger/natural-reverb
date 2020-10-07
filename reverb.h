@@ -5,6 +5,7 @@
 #include <iostream>
 #include <random>
 #include <chrono>
+#include <set>
 #include <zita-convolver.h>
 #include <Eigen/Core>
 
@@ -104,8 +105,9 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 
 	params pars;
 
-	std::future<std::unique_ptr<Convproc> > new_proc;
+	std::future<params::Result> new_proc;
 	std::unique_ptr<Convproc> proc;
+	std::set<std::size_t> allowed{64, 128, 256, 512, 1024, 2048, 4096, 8192};
 
 	float* port[p_n_ports];
 
@@ -119,7 +121,7 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 	}
 
 	void run(uint32_t N){
-		if (N == 0)
+		if (allowed.find(N) == allowed.end())
 			return;
 
 		params pars2{
