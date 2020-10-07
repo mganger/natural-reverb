@@ -165,8 +165,8 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 			float cross = std::pow(10,*port[p_cross]/20);
 
 			Mat2d<2> mix(2, 2);
-			mix << gain, cross,
-			       cross, gain;
+			mix << gain, cross*gain,
+			       cross*gain, gain;
 
 			Arr2d<2> mixed = (mix*x).array();
 
