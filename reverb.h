@@ -79,14 +79,14 @@ struct params {
 
 		auto proc = std::make_unique<Convproc>();
 		auto L = imp.cols();
-		proc->set_options(0);
+		proc->set_options(Convproc::OPT_VECTOR_MODE);
 		auto result = proc->configure(
 			2, // # in channels
 			2, // # out channels
 			L,
 			buffersize, // buffer size (quantum)
 			buffersize, // min partition
-			buffersize, // max partition
+			Convproc::MAXPART, // max partition
 			0.f); // density
 
 		if (result) {
@@ -116,7 +116,7 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 
 	float rate;
 	Reverb(const lvtk::Args& args_) :
-		Plugin(args_), rate(args_.sample_rate), proc(), new_proc()
+		Plugin(args_), rate(args_.sample_rate)
 	{}
 
 	void connect_port (uint32_t p, void* data) {
