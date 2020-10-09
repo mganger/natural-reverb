@@ -97,6 +97,7 @@ struct params {
 				proc->impdata_create(i, i, 1, imp.row(i).data(), 0, L);
 		}
 
+		proc->start_process(0, 0);
 		return std::make_tuple(*this, std::move(proc));
 	}
 
@@ -136,17 +137,17 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 			.buffersize = N,
 		};
 
-		if ((!proc || (pars != pars2)) && !new_proc.valid()) {
-			new_proc = std::async(std::launch::async, pars2);
-		}
 
-		if (new_proc.valid() && new_proc.wait_for(0s) == std::future_status::ready) {
-			auto [new_pars, new_proc_ptr] = new_proc.get();
-			if(new_proc_ptr) {
-				proc = std::move(new_proc_ptr);
-				pars = new_pars;
-				proc->start_process(0, 0);
+		if (new_proc.valid()) {
+			if (new_proc.wait_for(0s) == std::future_status::ready) {
+				auto [new_pars, new_proc_ptr] = new_proc.get();
+				if(new_proc_ptr) {
+					proc = std::move(new_proc_ptr);
+					pars = new_pars;
+				}
 			}
+		} else if (!proc || pars != pars2) {
+			new_proc = std::async(std::launch::async, pars2);
 		}
 
 		if (N != pars.buffersize)
