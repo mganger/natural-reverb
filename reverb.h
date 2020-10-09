@@ -98,6 +98,8 @@ struct params {
 		}
 
 		proc->start_process(0, 0);
+		if(proc->state() == Convproc::ST_WAIT)
+			proc->check_stop();
 		return std::make_tuple(*this, std::move(proc));
 	}
 
