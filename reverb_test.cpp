@@ -15,6 +15,7 @@ struct Fixture {
 	float rate = 96000;
 	float gain = -1;
 	float cross = -10;
+	float dry = -10;
 	lvtk::Args args;
 	Reverb plugin;
 
@@ -29,6 +30,7 @@ struct Fixture {
 		plugin.connect_port(p_dist, &dist);
 		plugin.connect_port(p_gain, &gain);
 		plugin.connect_port(p_cross, &cross);
+		plugin.connect_port(p_dry, &dry);
 		BOOST_TEST_CHECKPOINT("Starting");
 	}
 };

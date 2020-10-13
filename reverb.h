@@ -180,9 +180,18 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 
 			proc->process(false);
 
-			x << Map(proc->outdata(0), N),
+			Mat2d<2> y(2, N);
+			y << Map(proc->outdata(0), N),
 			     Map(proc->outdata(1), N);
+
+			if (*port[p_dry] > p_ports[p_dry].min) {
+				float dry = std::pow(10,*port[p_dry]/20);
+				x = x*dry + y;
+			} else {
+				x.swap(y);
+			}
 		}
+
 
 		Map(port[p_left_out], N) = x.row(0).array();
 		Map(port[p_right_out], N) = x.row(1).array();
