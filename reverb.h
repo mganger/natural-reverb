@@ -1,6 +1,4 @@
 #pragma once
-#define __STDCPP_WANT_MATH_SPEC_FUNCS__ 1
-#include <cmath>
 #include <future>
 #include <iostream>
 #include <random>
@@ -18,31 +16,21 @@ inline static constexpr float c_sound = 343;
 
 using Arr = Eigen::Array<float, 1, Eigen::Dynamic, Eigen::RowMajor>;
 using Map = Eigen::Map<Arr>;
-template <std::size_t N>
-using Arr2d = Eigen::Array<float, N, Eigen::Dynamic, Eigen::RowMajor>;
-template <std::size_t N>
-using Mat2d = Eigen::Matrix<float, N, Eigen::Dynamic, Eigen::RowMajor>;
+using Arr2d = Eigen::Array<float, 2, Eigen::Dynamic, Eigen::RowMajor>;
+using Mat2d = Eigen::Matrix<float, 2, Eigen::Dynamic, Eigen::RowMajor>;
 
-inline static std::minstd_rand rd(12345);
+inline static std::mt19937 rd(12345);
 inline static std::normal_distribution<float> dist;
 inline static const std::size_t MAX_L = p_ports[p_length].max*192000;
-inline static const Arr2d<2> randn = Arr2d<2>::NullaryExpr(2, MAX_L, [](){return dist(rd);});
+inline static const Arr2d randn = Arr2d::NullaryExpr(2, MAX_L, [](){return dist(rd);});
 
-template <class T>
-Arr ellipse_integral(const T& t, float d){
-	Arr b2 = t*(t + d);
-	Arr a2 = (b2 - d*d/4.0).max(1e-30);
-	Arr arg = (1 - b2/a2).max(0).min(1).sqrt();
-	return a2.sqrt()*arg.unaryExpr([](auto a) {
-		return std::comp_ellint_2(a);
-	});
-}
+Arr2d reverb(uint32_t L, float d, float p, float r){
+	using namespace Eigen;
+	auto d2 = d/2;
+	auto t = Arr::LinSpaced(L, 0, (L-1)/d);
 
-Arr2d<2> reverb(uint32_t L, float d, float p, float r){
-	auto t = Arr::LinSpaced(L, 0, L-1);
-	Arr rad = ellipse_integral(t, d);
-	Arr env = rad.sqrt()*(-p*(t+d).log() - r*t).exp();
-	Arr2d<2> imp = randn.block(0, 0, 2, L).rowwise()*env;
+	Arr env = sqrt(sqrt(t*(t+2)))*exp(-p*log1p(t) - r*d*t);
+	Arr2d imp = randn.block(0, 0, 2, L).rowwise()*env;
 	return imp.matrix().rowwise().normalized().array();
 }
 
@@ -65,7 +53,7 @@ struct params {
 		rate != p.rate;
 	}
 
-	Arr2d<2> make_impulses() const {
+	Arr2d make_impulses() const {
 		float d = dist/c_sound*rate;
 		float r = atten/20*log(10)/rate;
 		uint32_t L(length*rate);
@@ -80,7 +68,7 @@ struct params {
 		auto proc = std::make_unique<Convproc>();
 		auto L = imp.cols();
 		proc->set_options(Convproc::OPT_VECTOR_MODE);
-		auto result = proc->configure(
+		auto error = proc->configure(
 			2, // # in channels
 			2, // # out channels
 			L,
@@ -89,7 +77,7 @@ struct params {
 			Convproc::MAXPART, // max partition
 			0.f); // density
 
-		if (result) {
+		if (error) {
 			std::cout << "Error creating processor" << std::endl;
 			proc = nullptr;
 		} else {
@@ -144,7 +132,7 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 			if (new_proc.wait_for(0s) == std::future_status::ready) {
 				auto [new_pars, new_proc_ptr] = new_proc.get();
 				if(new_proc_ptr) {
-					std::thread deleter([](auto && ptr){ptr.reset();}, std::move(proc));
+					std::thread deleter([](auto && ptr){}, std::move(proc));
 					proc = std::move(new_proc_ptr);
 					deleter.detach();
 					pars = new_pars;
@@ -157,7 +145,7 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 		if (N != pars.buffersize)
 			return;
 
-		Mat2d<2> x(2, N);
+		Mat2d x(2, N);
 		x << Map(port[p_left_in], N),
 		     Map(port[p_right_in], N);
 		x = x.array().isFinite().select(x, 0);
@@ -169,18 +157,18 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 			float gain = std::pow(10,*port[p_gain]/20);
 			float cross = std::pow(10,*port[p_cross]/20);
 
-			Mat2d<2> mix(2, 2);
+			Mat2d mix(2, 2);
 			mix << gain, cross*gain,
 			       cross*gain, gain;
 
-			Arr2d<2> mixed = (mix*x).array();
+			Arr2d mixed = (mix*x).array();
 
 			Map(proc->inpdata(0), N) = mixed.row(0);
 			Map(proc->inpdata(1), N) = mixed.row(1);
 
 			proc->process(false);
 
-			Mat2d<2> y(2, N);
+			Mat2d y(2, N);
 			y << Map(proc->outdata(0), N),
 			     Map(proc->outdata(1), N);
 
