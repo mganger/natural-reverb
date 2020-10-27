@@ -132,9 +132,8 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 			if (new_proc.wait_for(0s) == std::future_status::ready) {
 				auto [new_pars, new_proc_ptr] = new_proc.get();
 				if(new_proc_ptr) {
-					std::thread deleter([](auto && ptr){}, std::move(proc));
+					std::thread([](auto &&){}, std::move(proc)).detach();
 					proc = std::move(new_proc_ptr);
-					deleter.detach();
 					pars = new_pars;
 				}
 			}
