@@ -16,6 +16,7 @@ struct Fixture {
 	float gain = -1;
 	float cross = -10;
 	float dry = -10;
+	float damp = 1.0;
 	lvtk::Args args;
 	Reverb plugin;
 
@@ -31,6 +32,7 @@ struct Fixture {
 		plugin.connect_port(p_gain, &gain);
 		plugin.connect_port(p_cross, &cross);
 		plugin.connect_port(p_dry, &dry);
+		plugin.connect_port(p_damp, &damp);
 		BOOST_TEST_CHECKPOINT("Starting");
 	}
 };
@@ -83,7 +85,7 @@ BOOST_AUTO_TEST_CASE(io_same) {
 }
 
 BOOST_AUTO_TEST_CASE(numbers) {
-	auto rev = reverb(1000, 100, 2, 0.0001);
+	auto rev = reverb(1000, 100, 2, 0.0001, 0.0001);
 	BOOST_CHECK(rev.maxCoeff() < 5);
 	BOOST_CHECK(rev.isFinite().all());
 }

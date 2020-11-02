@@ -24,42 +24,55 @@ inline static std::normal_distribution<float> dist;
 inline static const std::size_t MAX_L = p_ports[p_length].max*192000;
 inline static const Arr2d randn = Arr2d::NullaryExpr(2, MAX_L, [](){return dist(rd);});
 
-Arr2d reverb(uint32_t L, float d, float p, float r){
-	using namespace Eigen;
-	auto d2 = d/2;
-	auto t = Arr::LinSpaced(L, 0, (L-1)/d);
+Arr iir_lowpass(Arr imp, const Arr& alpha, std::size_t k) {
+	for (std::size_t i = 0; i < k; i++) {
+		float y = 0;
+		imp = imp.binaryExpr(alpha, [&y](auto x, auto a){
+			return y += (x - y)*a;
+		});
+	}
+	return imp;
+}
 
-	Arr env = sqrt(sqrt(t*(t+2)))*exp(-p*log1p(t) - r*d*t);
-	Arr2d imp = randn.block(0, 0, 2, L).rowwise()*env;
-	return imp.matrix().rowwise().normalized().array();
+Arr2d reverb(uint32_t L, float d, float p, float r, float c, std::size_t k = 8) {
+	using namespace Eigen;
+	Arr t = Arr::LinSpaced(L, 1, 1 + (L-1)/d);
+	Arr dt = Arr::LinSpaced(L, 0, (L-1));
+	Arr t2 = t.square();
+
+	//Arr wc = 2*M_PI*4*exp(dt*-c);
+	//Arr alpha = sqrt(wc / (wc + 1));
+	//Arr alpha = 1/(1+5*sqrt(c*(dt + d)));
+	//Arr alpha = 1/(1+exp((c*dt + 1.5*log(c*(dt+d)))/6)*5);
+	Arr alpha = 1/(1+sqrt((c/k)*(dt+d)));
+
+	Arr2d imp(2, L);
+	imp << iir_lowpass(randn.row(0).segment(0, L), alpha, k),
+	       iir_lowpass(randn.row(1).segment(0, L), alpha, k);
+
+	Arr env = sqrt(sqrt(t2-1)*(t2-0.5))*exp((-p-1)*log(t) - r*dt);
+	imp.rowwise() *= env.matrix().normalized().array();
+	return imp;
 }
 
 struct params {
 	using Result = std::tuple<params, std::unique_ptr<Convproc>>;
 
-	float length;
-	float decay;
-	float atten;
-	float dist;
-	float rate;
+	float length, decay, atten, dist, damp, rate;
 	uint32_t buffersize;
 
-	bool operator!=(const params& p){
-		return length != p.length ||
-		decay != p.decay ||
-		atten != p.atten ||
-		dist != p.dist ||
-		buffersize != p.buffersize ||
-		rate != p.rate;
-	}
+	bool operator <=>(params const &) const = default;
 
 	Arr2d make_impulses() const {
 		float d = dist/c_sound*rate;
 		float r = atten/20*log(10)/rate;
 		uint32_t L(length*rate);
 		float p = decay;
+		//float c = damp*100*c_sound/rate/20/log(10)/290;
+		//float c = damp/rate;
+		float c = damp/(1e3*2*M_PI);
 
-		return reverb(L,d,p,r);
+		return reverb(L,d,p,r,c);
 	}
 
 	Result operator()() const {
@@ -123,6 +136,7 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 			.decay = *port[p_decay],
 			.atten = *port[p_atten],
 			.dist = *port[p_dist],
+			.damp = *port[p_damp],
 			.rate = rate,
 			.buffersize = N,
 		};
