@@ -12,8 +12,6 @@
 
 using namespace std::chrono;
 
-inline static constexpr float c_sound = 343;
-
 using Arr = Eigen::Array<float, 1, Eigen::Dynamic, Eigen::RowMajor>;
 using Map = Eigen::Map<Arr>;
 using Arr2d = Eigen::Array<float, 2, Eigen::Dynamic, Eigen::RowMajor>;
@@ -37,20 +35,15 @@ Arr iir_lowpass(Arr imp, const Arr& alpha, std::size_t k) {
 Arr2d reverb(uint32_t L, float d, float p, float r, float c, std::size_t k = 8) {
 	using namespace Eigen;
 	Arr t = Arr::LinSpaced(L, 1, 1 + (L-1)/d);
-	Arr dt = Arr::LinSpaced(L, 0, (L-1));
 	Arr t2 = t.square();
 
-	//Arr wc = 2*M_PI*4*exp(dt*-c);
-	//Arr alpha = sqrt(wc / (wc + 1));
-	//Arr alpha = 1/(1+5*sqrt(c*(dt + d)));
-	//Arr alpha = 1/(1+exp((c*dt + 1.5*log(c*(dt+d)))/6)*5);
-	Arr alpha = 1/(1+sqrt((c/k)*(dt+d)));
+	Arr alpha = 1/(1+sqrt((c/k)*t));
 
 	Arr2d imp(2, L);
 	imp << iir_lowpass(randn.row(0).segment(0, L), alpha, k),
 	       iir_lowpass(randn.row(1).segment(0, L), alpha, k);
 
-	Arr env = sqrt(sqrt(t2-1)*(t2-0.5))*exp((-p-1)*log(t) - r*dt);
+	Arr env = sqrt(sqrt(t2-1)*(t2-0.5))*exp((-p-1)*log(t) - r*(t-1));
 	imp.rowwise() *= env.matrix().normalized().array();
 	return imp;
 }
@@ -64,24 +57,23 @@ struct params {
 	bool operator <=>(params const &) const = default;
 
 	Arr2d make_impulses() const {
-		float d = dist/c_sound*rate;
-		float r = atten/20*log(10)/rate;
 		uint32_t L(length*rate);
-		float p = decay;
-		//float c = damp*100*c_sound/rate/20/log(10)/290;
-		//float c = damp/rate;
-		float c = damp/(1e3*2*M_PI);
+
+		static const float c_sound = 343, w0 = 1e3*2*M_PI, db_to_exp = log(10)/20;
+		float d = dist/c_sound*rate,
+			r = atten*db_to_exp,
+			p = decay,
+			c = damp*db_to_exp/pow(w0/rate, 2);
 
 		return reverb(L,d,p,r,c);
 	}
 
 	Result operator()() const {
 		auto imp = make_impulses();
-
 		auto proc = std::make_unique<Convproc>();
-		auto L = imp.cols();
+		auto const L = imp.cols();
 		proc->set_options(Convproc::OPT_VECTOR_MODE);
-		auto error = proc->configure(
+		auto const error = proc->configure(
 			2, // # in channels
 			2, // # out channels
 			L,
@@ -94,13 +86,12 @@ struct params {
 			std::cout << "Error creating processor" << std::endl;
 			proc = nullptr;
 		} else {
-			for (auto i : {0, 1})
+			for (std::size_t i = 0; i < imp.rows(); i++)
 				proc->impdata_create(i, i, 1, imp.row(i).data(), 0, L);
+			proc->start_process(0, 0);
+			if(proc->state() == Convproc::ST_WAIT)
+				proc->check_stop();
 		}
-
-		proc->start_process(0, 0);
-		if(proc->state() == Convproc::ST_WAIT)
-			proc->check_stop();
 		return std::make_tuple(*this, std::move(proc));
 	}
 
