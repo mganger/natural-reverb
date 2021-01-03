@@ -32,12 +32,13 @@ Arr iir_lowpass(Arr imp, const Arr& alpha, std::size_t k) {
 	return imp;
 }
 
-Arr2d reverb(uint32_t L, float d, float p, float r, float c, std::size_t k = 8) {
+Arr2d reverb(uint32_t L, float d, float p, float r, float c, std::size_t k = 16) {
 	using namespace Eigen;
 	Arr t = Arr::LinSpaced(L, 1, 1 + (L-1)/d);
 	Arr t2 = t.square();
 
-	Arr alpha = 1/(1+sqrt((c/k)*t));
+	// Compute the lowpass coefficient as if it is an ideal gaussian filter
+	Arr alpha = 2 / (1 + sqrt(1 + (4*c/k)*t));
 
 	Arr2d imp(2, L);
 	imp << iir_lowpass(randn.row(0).segment(0, L), alpha, k),
@@ -63,7 +64,7 @@ struct params {
 		float d = dist/c_sound*rate,
 			r = atten*db_to_exp,
 			p = decay,
-			c = damp*db_to_exp/pow(w0/rate, 2);
+			c = 2*db_to_exp*damp*pow(rate/w0, 2);
 
 		return reverb(L,d,p,r,c);
 	}
