@@ -2,8 +2,9 @@
 
 ## Installation
 
-You will need: `lvtk-2`, `zita-convolver` (v4), lv2-toolkit, and Eigen. Some of
-these are usually available with your package manager.
+You will need: `lvtk-2`, `zita-convolver` (v4), lv2-toolkit, Eigen, and
+Boost.Test. Some of these are usually available with your package manager. With
+a little hacking of `CMakeLists.txt` Boost can likely be eliminated.
 
 ```bash
 cmake .
