@@ -148,7 +148,7 @@ struct Reverb : public lvtk::Plugin<Reverb, lvtk::Worker> {
 		} else if (!proc || pars != pars2) {
 			job = std::packaged_task<params::Result()>{pars2};
 			new_proc = job.get_future();
-			schedule_work(1, "");  // Just notify the thread to do work
+			notify_worker();
 		}
 
 		if (N != pars.buffersize)
@@ -194,7 +194,11 @@ struct Reverb : public lvtk::Plugin<Reverb, lvtk::Worker> {
 		Map(port[p_right_out], N) = x.row(1).array();
 	}
 
-	lvtk::WorkerStatus work(lvtk::WorkerRespond &, uint32_t, const void*) {
+	virtual void notify_worker() {
+		schedule_work(1, "");  // Just notify the thread to do work
+	}
+
+	lvtk::WorkerStatus work(lvtk::WorkerRespond&, uint32_t, const void*) {
 		if (job.valid())
 			job();
 		return LV2_WORKER_SUCCESS;

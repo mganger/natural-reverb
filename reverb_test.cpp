@@ -4,6 +4,15 @@
 
 namespace utf = boost::unit_test::framework;
 
+struct MockReverb : public Reverb {
+	MockReverb(const lvtk::Args& args_) : Reverb(args_) {}
+
+	void notify_worker() override {
+		lvtk::WorkerRespond* resp;
+		work(*resp, 1, "");
+	}
+};
+
 struct Fixture {
 	static const int N = 256;
 	float input[2][N];
@@ -18,7 +27,7 @@ struct Fixture {
 	float dry = -10;
 	float damp = 1.0;
 	lvtk::Args args;
-	Reverb plugin;
+	MockReverb plugin;
 
 	Fixture() : args(rate, "", {}), plugin(args) {
 		plugin.connect_port(p_left_in, input[0]);
