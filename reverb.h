@@ -8,6 +8,7 @@
 #include <Eigen/Core>
 
 #include <lvtk/plugin.hpp>
+#include <lvtk/ext/worker.hpp>
 #include <reverb.peg>
 
 using namespace std::chrono;
@@ -99,11 +100,12 @@ struct params {
 };
 
 
-struct Reverb : public lvtk::Plugin<Reverb> {
+struct Reverb : public lvtk::Plugin<Reverb, lvtk::Worker> {
 	inline constexpr static const char* URI = p_uri;
 
 	params pars;
 
+	std::packaged_task<params::Result()> job;
 	std::future<params::Result> new_proc;
 	std::unique_ptr<Convproc> proc;
 	std::set<std::size_t> allowed{64, 128, 256, 512, 1024, 2048, 4096, 8192};
@@ -144,7 +146,9 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 				}
 			}
 		} else if (!proc || pars != pars2) {
-			new_proc = std::async(std::launch::async, pars2);
+			job = std::packaged_task<params::Result()>{pars2};
+			new_proc = job.get_future();
+			schedule_work(1, "");  // Just notify the thread to do work
 		}
 
 		if (N != pars.buffersize)
@@ -188,6 +192,12 @@ struct Reverb : public lvtk::Plugin<Reverb> {
 
 		Map(port[p_left_out], N) = x.row(0).array();
 		Map(port[p_right_out], N) = x.row(1).array();
+	}
+
+	lvtk::WorkerStatus work(lvtk::WorkerRespond &, uint32_t, const void*) {
+		if (job.valid())
+			job();
+		return LV2_WORKER_SUCCESS;
 	}
 };
 
