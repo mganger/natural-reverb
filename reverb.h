@@ -135,31 +135,31 @@ struct Reverb : public lvtk::Plugin<Reverb, lvtk::Worker> {
 			.buffersize = N,
 		};
 
+		auto queued = [&]{return new_proc.valid();};
+		auto ready = [&]{return new_proc.wait_for(0s) == std::future_status::ready;};
+		auto should_update = !proc || pars != pars2;
 
-		if (new_proc.valid()) {
-			if (new_proc.wait_for(0s) == std::future_status::ready) {
-				auto [new_pars, new_proc_ptr] = new_proc.get();
-				if(new_proc_ptr) {
-					std::thread([](auto &&){}, std::move(proc)).detach();
-					proc = std::move(new_proc_ptr);
-					pars = new_pars;
-				}
-			}
-		} else if (!proc || pars != pars2) {
+		if (!queued() && should_update) {
 			job = std::packaged_task<params::Result()>{pars2};
 			new_proc = job.get_future();
 			notify_worker();
 		}
 
-		if (N != pars.buffersize)
-			return;
+		if (queued() && ready()) {
+			auto [new_pars, new_proc_ptr] = new_proc.get();
+			if(new_proc_ptr) {
+				std::thread([](auto &&){}, std::move(proc)).detach();
+				proc = std::move(new_proc_ptr);
+				pars = new_pars;
+			}
+		}
 
 		Mat2d x(2, N);
 		x << Map(port[p_left_in], N),
 		     Map(port[p_right_in], N);
 		x = x.array().isFinite().select(x, 0);
 
-		if (proc) {
+		if (N == pars.buffersize && proc) {
 			if(proc->state() == Convproc::ST_WAIT)
 				proc->check_stop();
 

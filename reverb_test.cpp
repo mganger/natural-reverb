@@ -15,8 +15,8 @@ struct MockReverb : public Reverb {
 
 struct Fixture {
 	static const int N = 256;
-	float input[2][N];
-	float output[2][N];
+	float input[2][N*2];
+	float output[2][N*2];
 	float length = 3;
 	float decay = 2.1;
 	float atten = 0.1;
@@ -52,17 +52,16 @@ BOOST_AUTO_TEST_CASE(simple) {
 	BOOST_CHECK(!plugin.proc);
 	BOOST_CHECK(!plugin.new_proc.valid());
 	plugin.run(N);
-	BOOST_CHECK(!plugin.proc);
-	BOOST_CHECK(plugin.new_proc.valid());
+	BOOST_CHECK(plugin.proc);
+	BOOST_CHECK(!plugin.new_proc.valid());
 }
 
 BOOST_AUTO_TEST_CASE(no_change) {
 	BOOST_CHECK(!plugin.proc);
 	plugin.run(N);
-	BOOST_CHECK(!plugin.proc);
+	BOOST_CHECK(plugin.proc);
 	BOOST_TEST_CHECKPOINT("After first run");
-	BOOST_CHECK(plugin.new_proc.valid());
-	plugin.new_proc.wait();
+	BOOST_CHECK(!plugin.new_proc.valid());
 	BOOST_TEST_CHECKPOINT("After ready");
 	plugin.run(N);
 	BOOST_CHECK(plugin.proc);
@@ -70,20 +69,17 @@ BOOST_AUTO_TEST_CASE(no_change) {
 
 BOOST_AUTO_TEST_CASE(changed) {
 	plugin.run(N);
-	plugin.new_proc.wait();
 	plugin.run(N);
 	length = 2;
 	BOOST_CHECK(!plugin.new_proc.valid());
 	plugin.run(N);
-	BOOST_CHECK(plugin.new_proc.valid());
-	plugin.new_proc.wait();
+	BOOST_CHECK(!plugin.new_proc.valid());
 	plugin.run(N);
 	BOOST_CHECK(plugin.pars.length == 2);
 }
 
 BOOST_AUTO_TEST_CASE(buffer_changed) {
 	plugin.run(N);
-	plugin.new_proc.wait();
 	plugin.run(N*2);
 }
 
