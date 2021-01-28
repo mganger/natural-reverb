@@ -114,7 +114,7 @@ struct Reverb : public lvtk::Plugin<Reverb, lvtk::Worker> {
 
 	float rate;
 	Reverb(const lvtk::Args& args_) :
-		Plugin(args_), rate(args_.sample_rate)
+		Plugin(args_), pars(), rate(args_.sample_rate)
 	{}
 
 	void connect_port (uint32_t p, void* data) {
