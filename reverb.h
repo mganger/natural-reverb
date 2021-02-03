@@ -175,7 +175,7 @@ struct Reverb : public lvtk::Plugin<Reverb, lvtk::Worker> {
 			Map(proc->inpdata(0), N) = mixed.row(0);
 			Map(proc->inpdata(1), N) = mixed.row(1);
 
-			proc->process(false);
+			proc->process(true);
 
 			Mat2d y(2, N);
 			y << Map(proc->outdata(0), N),
